@@ -1,15 +1,16 @@
-"""한자 탐험대 v1.1.4 | 한국어문회 8급 복습 + 7급 학습."""
+"""한자 탐험대 v1.1.5 | 어린이 학습 UI 개선 및 큰 글자."""
 
 import json
 import random
 from datetime import datetime, timedelta
+from html import escape
 from zoneinfo import ZoneInfo
 
 import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="한자 탐험대 v1.1.4",
+    page_title="한자 탐험대 v1.1.5",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -208,12 +209,22 @@ def quiz_panel():
     question = quiz["questions"][quiz["index"]]
     st.progress(quiz["index"] / count)
     st.caption(f"문제 {quiz['index'] + 1} / {count}")
-    if question["kind"] in ("훈음", "뜻"):
-        st.markdown(f'<div class="hanja-card">{question["char"]}</div>', unsafe_allow_html=True)
-    st.markdown(f"**{question['title']}**")
+    with st.container(key="quiz_problem_area"):
+        if question["kind"] in ("훈음", "뜻"):
+            st.markdown(
+                f'<div class="hanja-card quiz-symbol">{escape(question["char"])}</div>',
+                unsafe_allow_html=True,
+            )
+        st.markdown(
+            f'<div class="quiz-prompt">{escape(question["title"])}</div>',
+            unsafe_allow_html=True,
+        )
     key = f"answer_{quiz['serial']}_{quiz['index']}"
-    choice = st.radio("정답 선택", question["choices"], index=None,
-                      label_visibility="collapsed", key=key, disabled=quiz["answered"])
+    with st.container(key="quiz_choice_area"):
+        choice = st.radio(
+            "정답 선택", question["choices"], index=None,
+            label_visibility="collapsed", key=key, disabled=quiz["answered"],
+        )
 
     if not quiz["answered"]:
         if st.button("정답 확인", type="primary", disabled=choice is None):
@@ -302,7 +313,7 @@ def page_learning():
         if st.button("다음 한자", use_container_width=True):
             st.session_state.card_cursor = (idx + 1) % len(cards)
             st.rerun()
-    st.caption("획순·음성·어휘 예문은 이후 버전에서 검증된 자료를 연계할 예정입니다.")
+    st.caption("획순은 상단의 ‘획순 쓰기’ 메뉴에서 연습할 수 있어요. 음성·예문은 다음 버전에서 추가할 예정입니다.")
 
 
 def page_quiz():
@@ -455,20 +466,20 @@ def page_writing():
         selection_id = f"stroke_unit_pick_{grade}_{unit}"
         if st.session_state.get(selection_id) not in [c["char"] for c in cards]:
             st.session_state[selection_id] = cards[0]["char"]
-        # 휴대폰에서도 누르기 쉽도록 첫 줄 3개, 둘째 줄 2개로 배치합니다.
-        for start in (0, 3):
-            row_cards = cards[start:start + 3]
-            cols = st.columns(len(row_cards))
-            for i, card in enumerate(row_cards):
-                with cols[i]:
-                    if st.button(
-                        card["char"], use_container_width=True,
-                        type="primary" if st.session_state[selection_id] == card["char"] else "secondary",
-                        key=f"stroke_pick_{grade}_{unit}_{card['char']}",
-                    ):
-                        st.session_state[selection_id] = card["char"]
+        # 선택 버튼은 한자 자체를 크게 표시합니다. 모바일에서도 3+2 배열 유지.
+        with st.container(key="stroke_unit_buttons"):
+            for start in (0, 3):
+                row_cards = cards[start:start + 3]
+                cols = st.columns(len(row_cards))
+                for i, card in enumerate(row_cards):
+                    with cols[i]:
+                        if st.button(
+                            card["char"], use_container_width=True,
+                            type="primary" if st.session_state[selection_id] == card["char"] else "secondary",
+                            key=f"stroke_pick_{grade}_{unit}_{card['char']}",
+                        ):
+                            st.session_state[selection_id] = card["char"]
         char = st.session_state[selection_id]
-        st.caption(f"선택한 한자: {char} · {label(INDEX[char])}")
     else:
         # 완료한 한자와 전체 150자는 검색 가능한 목록이 더 편리합니다.
         option_key = f"stroke_selection_{view}_{st.session_state.get('stroke_all_grade', '')}"
@@ -477,10 +488,24 @@ def page_writing():
             format_func=lambda c: f"{c} · {label(INDEX[c])} ({INDEX[c]['grade']})",
             key=option_key,
         )
-    st.info(
-        "주의: 획순 애니메이션과 자동 판정은 Hanzi Writer의 중국식 데이터 기준입니다. "
-        "배정한자 150자를 선택할 수 있지만 한국식 획순 전체 검증은 아직 완료되지 않았습니다."
+    # 작게 표시되던 '선택한 한자' 설명을 별도 큰 카드로 개선.
+    selected_card = INDEX[char]
+    st.markdown(
+        '<div class="selected-hanja-banner">'
+        f'<span class="selected-hanja-symbol">{escape(char)}</span>'
+        '<div class="selected-hanja-info">'
+        '<span class="selected-hanja-caption">지금 연습할 한자</span>'
+        f'<strong>{escape(label(selected_card))}</strong>'
+        f'<span class="selected-hanja-grade">{escape(selected_card["grade"])}</span>'
+        '</div></div>',
+        unsafe_allow_html=True,
     )
+    st.caption("※ 현재 쓰기 판정은 중국식 데이터 기준이며 한국식 획순 검증은 진행 전입니다.")
+    with st.expander("학부모 안내 · 획순 데이터 검증 상태"):
+        st.info(
+            "획순 애니메이션과 자동 판정은 Hanzi Writer의 중국식 데이터 기준입니다. "
+            "배정한자 150자를 선택할 수 있지만 한국식 획순 전체 검증은 아직 완료되지 않았습니다."
+        )
 
     # 수동으로 획수를 먼저 확인했던 5자만 별도 개수 검사합니다.
     # 나머지는 라이브러리의 실제 획 데이터 개수로 숫자를 생성합니다.
@@ -496,25 +521,37 @@ def page_writing():
 <script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.5/dist/hanzi-writer.min.js"></script>
 <style>
   * { box-sizing: border-box; }
-  body { margin:0; font-family:system-ui,-apple-system,sans-serif; color:#17283e; }
-  .wrap { display:flex; flex-direction:column; align-items:center; gap:10px; }
-  .board { width:280px; height:280px; border:1px solid #cbd5e1;
-    border-radius:12px; background:#fff; position:relative; overflow:hidden; }
-  #target {width:280px;height:280px;touch-action:none;}
-  #target svg {touch-action:none;}
-  #numbers { position:absolute;top:0;left:0;width:280px;height:280px;
-    pointer-events:none; overflow:visible; }
-  .toolbar { display:flex; flex-wrap:wrap; justify-content:center; gap:7px; }
-  button { font:inherit; cursor:pointer; border:1px solid #cbd5e1;
-    border-radius:9px; min-height:43px; padding:8px 13px;
-    background:#f8fafc; color:#17283e; }
+  body { margin:0; font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif;
+    color:#20364A; background:#F7FAFD; }
+  .wrap { display:flex; flex-direction:column; align-items:center; gap:12px;
+    padding:10px 6px 14px; max-width:520px; margin:auto; }
+  .board { width:min(100%,360px); aspect-ratio:1/1; border:2px solid #B9D6E8;
+    border-radius:20px; background:#fff; position:relative; overflow:hidden;
+    box-shadow:0 12px 26px rgba(40,73,100,.10); }
+  .board::before { content:""; position:absolute; inset:0;pointer-events:none;
+    background:linear-gradient(to right,transparent calc(50% - .5px),#E6EDF5 50%,transparent calc(50% + .5px)),
+               linear-gradient(to bottom,transparent calc(50% - .5px),#E6EDF5 50%,transparent calc(50% + .5px)); }
+  #target {width:100%;height:100%;touch-action:none;position:relative;z-index:1;}
+  #target svg {touch-action:none;width:100%;height:100%;display:block;}
+  #numbers { position:absolute;inset:0;width:100%;height:100%;
+    pointer-events:none; overflow:visible;z-index:2; }
+  .toolbar { display:grid; grid-template-columns:repeat(2,minmax(0,1fr));
+    width:min(100%,470px);gap:10px; }
+  button { font:700 17px/1.35 "Malgun Gothic",system-ui,sans-serif;
+    cursor:pointer; border:1.5px solid #C9DBE7;
+    border-radius:14px; min-height:57px; padding:10px 12px;
+    background:#fff; color:#213B52;box-shadow:0 3px 8px rgba(36,77,111,.06); }
   button:disabled {cursor:not-allowed;opacity:.5;}
-  button.primary {background:#1668a5;color:white;border-color:#1668a5;}
-  .settings {font-size:14px;display:flex;align-items:center;gap:8px;}
-  input[type=checkbox] {width:18px;height:18px;accent-color:#1668a5;}
-  #status {font-size:14px;text-align:center;max-width:420px;min-height:42px;
-    line-height:1.5;padding:0 4px;}
-  #counter {font-size:14px;font-weight:600;color:#334155;}
+  button.primary {background:#127F91;color:white;border-color:#127F91;}
+  .settings {font-size:17px;font-weight:600;display:flex;align-items:center;gap:10px;}
+  input[type=checkbox] {width:23px;height:23px;accent-color:#127F91;}
+  #status {font-size:16px;text-align:center;max-width:470px;min-height:54px;
+    line-height:1.6;padding:6px 10px;background:#EDF5FA;border-radius:12px;width:100%;}
+  #counter {font-size:21px;font-weight:800;color:#203B55;}
+  @media(max-width:380px) {
+    .toolbar {gap:7px;}button {font-size:14px;min-height:56px;padding:9px 6px;}
+    #counter {font-size:18px;}#status {font-size:14px;}
+  }
 </style>
 </head>
 <body>
@@ -523,7 +560,7 @@ def page_writing():
   <div class="board">
     <div id="target" aria-label="한자 쓰기 영역"></div>
     <svg id="numbers" xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 280 280" aria-hidden="true"></svg>
+      viewBox="0 0 360 360" aria-hidden="true"></svg>
   </div>
   <label class="settings">
     <input id="showNumbers" type="checkbox" checked /> 획순 숫자 표시
@@ -540,8 +577,8 @@ def page_writing():
 'use strict';
 const char = __CHAR_JSON__;
 const expectedCount = __EXPECTED_COUNT__;
-const SIZE = 280;
-const PAD = 18;
+const SIZE = 360;
+const PAD = 22;
 const svgNS = 'http://www.w3.org/2000/svg';
 const overlay = document.getElementById('numbers');
 const counter = document.getElementById('counter');
@@ -725,7 +762,7 @@ if (typeof HanziWriter === 'undefined') {
 </body>
 </html>
 '''.replace("__CHAR_JSON__", char_js).replace("__EXPECTED_COUNT__", expected_js)
-    components.html(html, height=492, scrolling=False)
+    components.html(html, height=724, scrolling=False)
     st.caption(
         "학습 범위: 8급부터 7급까지 150자 선택 지원. 숫자는 각 획 옆의 시작점 근처에 표시됩니다. "
         "한국식 획순 검증 전 시범 적용이며 쓰기 성공 여부는 아직 별·점수·학습기록에 연결되지 않습니다."
@@ -733,20 +770,94 @@ if (typeof HanziWriter === 'undefined') {
 
 st.markdown("""
 <style>
-.block-container {max-width: 980px; padding-top: 1.25rem;}
-.hanja-card {font-size: clamp(90px, 13vw, 150px); font-weight: 650;
-  text-align: center; padding: 18px 0; border: 1px solid #e5e7eb;
-  border-radius: 16px; background: #fff; color: #182532;}
-.card-reading {font-size: 30px; font-weight: 700; text-align:center;
-  padding: 12px; color: #25354d;}
-div.stButton > button {min-height: 46px;}
+/* 한자 탐험대 v1.1.5: 학습 프로그램형 테마. 기능 로직과 분리된 UI 전용 CSS */
+:root { --study-navy:#253B54; --study-teal:#168A94;
+        --study-bg:#F5F9FC; --study-border:#DAE6EE; }
+.stApp {background:linear-gradient(180deg,#EAF5FA 0,#F6F9FC 280px,#FBFCFE 100%);}
+.block-container {max-width:1080px;padding-top:1.15rem;padding-bottom:3rem;}
+.study-hero {padding:26px 32px;border-radius:24px;background:linear-gradient(115deg,#176B84,#239A9D);
+  color:white;box-shadow:0 12px 30px rgba(12,91,111,.17);margin-bottom:20px;}
+.study-hero-kicker {font-size:13px;font-weight:800;letter-spacing:1.6px;opacity:.85;margin-bottom:7px;}
+.study-hero h1 {font-size:clamp(29px,4vw,43px);letter-spacing:-.045em;
+  margin:0 0 5px;line-height:1.3;color:#fff;}
+.study-hero p {font-size:clamp(15px,1.8vw,18px);font-weight:500;line-height:1.65;
+  margin:0;color:#EDFAFE;}
+/* 일관된 여백·카드·큰 터치 타깃 */
+[data-testid="stVerticalBlockBorderWrapper"]:has([data-testid="stMetric"]) {border-radius:18px;}
+[data-testid="stMetric"] {border:1px solid var(--study-border);border-radius:18px;
+  padding:18px 14px;background:white;box-shadow:0 4px 13px rgba(47,77,104,.04);}
+[data-testid="stMetricValue"] {font-size:clamp(22px,3vw,31px);color:var(--study-navy);}
+[data-testid="stMetricLabel"] {font-size:15px;font-weight:700;}
+h2,h3 {color:var(--study-navy);letter-spacing:-.035em;}
+div.stButton > button, div.stDownloadButton > button {min-height:54px;border-radius:14px;
+  padding:10px 20px;font-size:17px;font-weight:750;}
+[data-testid="stSelectbox"] [data-baseweb="select"] {min-height:50px;}
+[data-testid="stSelectbox"] [data-baseweb="select"] div {font-size:17px;}
+/* 상단 메뉴를 누르기 편한 학습 탭으로 구성 */
+.st-key-main_nav [role="radiogroup"] {padding:11px 12px;border:1px solid var(--study-border);
+  border-radius:16px;background:#FFF;gap:10px;flex-wrap:wrap;}
+.st-key-main_nav [role="radiogroup"] label {padding:8px 7px;border-radius:12px;}
+.st-key-main_nav [role="radiogroup"] label p {font-size:16px;font-weight:750;}
+/* 한자 학습 카드 */
+.hanja-card {font-size:clamp(130px,18vw,190px);font-weight:650;
+  text-align:center;padding:20px 12px;border:2px solid #D5E4ED;
+  border-radius:23px;background:#FFF;color:#192F49;line-height:1.45;
+  box-shadow:0 7px 19px rgba(55,95,123,.06);font-family:"Noto Serif CJK KR","Batang",serif;}
+.card-reading {font-size:clamp(28px,3.9vw,38px);font-weight:800;text-align:center;
+  padding:13px;color:#213B55;}
+/* 퀴즈 문제와 객관식 보기: 화면의 주인공이 되도록 확대 */
+.st-key-quiz_problem_area {padding:8px 0 12px;}
+.quiz-symbol {font-size:clamp(155px,23vw,215px);padding:16px 10px;}
+.quiz-prompt {font-size:clamp(25px,3.3vw,34px);font-weight:800;line-height:1.6;
+  color:#213953;text-align:center;padding:20px 10px 12px;word-break:keep-all;}
+.st-key-quiz_choice_area [role="radiogroup"] {display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
+.st-key-quiz_choice_area [role="radiogroup"] > label {display:flex;
+  background:#FFF;border:2px solid #D7E7EF;border-radius:18px;
+  padding:14px 18px;min-height:87px;cursor:pointer;align-items:center;
+  box-shadow:0 4px 14px rgba(40,73,100,.05);}
+.st-key-quiz_choice_area [role="radiogroup"] > label:has(input:checked) {
+  background:#E6F8F6;border-color:#15969C;}
+.st-key-quiz_choice_area [role="radiogroup"] > label p {
+  font-size:clamp(25px,3.1vw,34px)!important;line-height:1.4!important;
+  font-weight:800;word-break:keep-all;}
+/* 획순 쓰기: 선택 버튼과 선택한 글자를 크게 표시 */
+.st-key-stroke_unit_buttons div.stButton > button {font-size:clamp(37px,5.1vw,49px);
+  min-height:92px;font-family:"Noto Serif CJK KR","Batang",serif;
+  font-weight:700;border:2px solid #CCDFE9;border-radius:18px;}
+.st-key-stroke_unit_buttons div.stButton > button[kind="primary"] {
+  background:#157E91;border-color:#157E91;color:#fff;}
+.selected-hanja-banner {display:flex;gap:20px;align-items:center;background:#FFF;
+  padding:16px 23px;border:2px solid #D4E8EB;border-radius:20px;
+  margin:17px 0 14px;box-shadow:0 6px 15px rgba(39,82,108,.05);}
+.selected-hanja-symbol {font-family:"Noto Serif CJK KR","Batang",serif;
+  font-size:clamp(60px,8vw,92px);color:#116E83;font-weight:700;
+  min-width:clamp(65px,10vw,105px);line-height:1.3;text-align:center;}
+.selected-hanja-info {display:flex;flex-direction:column;gap:4px;}
+.selected-hanja-info strong {font-size:clamp(25px,3.3vw,35px);
+  color:#213953;font-weight:800;}
+.selected-hanja-caption,.selected-hanja-grade {font-size:14px;color:#597184;font-weight:700;}
+@media(max-width:680px) {
+  .block-container {padding-top:.7rem;}
+  .study-hero {padding:19px 20px;border-radius:19px;margin-bottom:13px;}
+  .st-key-quiz_choice_area [role="radiogroup"] {grid-template-columns:1fr;gap:9px;}
+  .st-key-quiz_choice_area [role="radiogroup"] > label {min-height:72px;padding:12px 15px;}
+  .st-key-quiz_choice_area [role="radiogroup"] > label p {font-size:26px!important;}
+  .st-key-stroke_unit_buttons div.stButton > button {min-height:78px;font-size:37px;}
+  .selected-hanja-banner {padding:12px 15px;gap:14px;}
+}
 </style>
 """, unsafe_allow_html=True)
 
-st.title("📚 한자 탐험대")
-st.caption("한국어문회 8급 합격 → 7급 도전 · 신규 100자 + 8급 복습 50자")
+st.markdown("""
+<section class="study-hero" aria-label="한자 탐험대 소개">
+  <div class="study-hero-kicker">HANJA EXPLORER · LEVEL 7</div>
+  <h1>한자 탐험대</h1>
+  <p>8급 합격에서 7급 도전까지 · 하루 5자씩 차근차근 배우고 써봐요</p>
+</section>
+""", unsafe_allow_html=True)
 menu = st.radio("메뉴", ["홈", "한자 학습", "획순 쓰기", "퀴즈", "복습", "학습 기록"],
-                horizontal=True, label_visibility="collapsed")
+                horizontal=True, label_visibility="collapsed", key="main_nav")
 st.divider()
 if menu == "홈":
     page_home()
@@ -762,4 +873,4 @@ else:
     page_records()
 
 st.divider()
-st.caption("한자 탐험대 v1.1.4 · 개인 학습용 · 실제 시험 문항을 재현한 공식 모의고사는 아닙니다.")
+st.caption("한자 탐험대 v1.1.5 · 개인 학습용 · 실제 시험 문항을 재현한 공식 모의고사는 아닙니다.")
