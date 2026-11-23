@@ -1,4 +1,4 @@
-"""한자 탐험대 v1.1 | 한국어문회 8급 복습 + 7급 학습."""
+"""한자 탐험대 v1.1.1 | 한국어문회 8급 복습 + 7급 학습."""
 
 import json
 import random
@@ -9,7 +9,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="한자 탐험대 v1.1",
+    page_title="한자 탐험대 v1.1.1",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -421,23 +421,25 @@ def page_records():
 
 
 def page_writing():
-    """획순 안내 및 직접 쓰기: 소규모 시범 기능."""
+    # 한자 획순 안내와 획 번호 오버레이 (기존 5자 시범).
     st.subheader("획순 쓰기")
-    st.write("획순을 본 뒤 손가락, 터치펜 또는 마우스로 직접 써보세요.")
-    # 한국식 획순과 외부 데이터의 차이를 검토하기 전까지 5자만 제공.
-    trial = ["山", "木", "人", "日", "水"]
+    st.write("한 획씩 재생되는 순서에 맞춰 숫자를 확인하고, 직접 써보세요.")
+
+    # 공식 한국식 획순 검수를 마치기 전까지 시범 글자 5개만 사용.
+    stroke_count = {"山": 3, "木": 4, "人": 2, "日": 4, "水": 4}
     char = st.selectbox(
-        "연습할 한자", trial,
+        "연습할 한자", list(stroke_count),
         format_func=lambda c: f"{c} · {label(INDEX[c])}",
         key="stroke_char",
     )
     st.info(
-        "한국 한자 기준 검증 전 시범 기능입니다. 획순은 중국계 Hanzi Writer 데이터이며 "
-        "한국식 획순과 차이가 있을 수 있습니다. 현재는 5자 기능 테스트입니다."
+        "시험 기능: 숫자는 Hanzi Writer의 획순 데이터와 정확히 같은 순서를 사용합니다. "
+        "해당 자료는 중국 한자 기반이므로 한국식 획순과의 완전한 일치 검증은 아직 끝나지 않았습니다."
     )
 
-    # 선택지에 포함된 단일 한자만 JavaScript에 전달합니다.
+    # json.dumps로 입력을 JS 문자열 값으로 안전하게 전달.
     char_js = json.dumps(char, ensure_ascii=False)
+    expected_js = json.dumps(stroke_count[char])
     html = r'''
 <!DOCTYPE html>
 <html lang="ko">
@@ -446,82 +448,236 @@ def page_writing():
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.5/dist/hanzi-writer.min.js"></script>
 <style>
-  body {margin:0; font-family:system-ui,sans-serif; color:#17283e;}
-  .wrap {display:flex;flex-direction:column;align-items:center;gap:12px;}
-  #target {width:280px;height:280px;touch-action:none; background:#fff;
-    border:1px solid #d1d5db;border-radius:12px; overflow:hidden;}
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,sans-serif; color:#17283e; }
+  .wrap { display:flex; flex-direction:column; align-items:center; gap:10px; }
+  .board { width:280px; height:280px; border:1px solid #cbd5e1;
+    border-radius:12px; background:#fff; position:relative; overflow:hidden; }
+  #target {width:280px;height:280px;touch-action:none;}
   #target svg {touch-action:none;}
-  .actions {display:flex;flex-wrap:wrap;justify-content:center;gap:8px;}
-  button {font:inherit;cursor:pointer;border:1px solid #cbd5e1;border-radius:9px;
-    min-height:42px;padding:9px 14px;background:#f8fafc;color:#17283e;}
-  button:disabled {cursor:not-allowed;opacity:.45;}
+  #numbers { position:absolute;top:0;left:0;width:280px;height:280px;
+    pointer-events:none; overflow:visible; }
+  .toolbar { display:flex; flex-wrap:wrap; justify-content:center; gap:7px; }
+  button { font:inherit; cursor:pointer; border:1px solid #cbd5e1;
+    border-radius:9px; min-height:43px; padding:8px 13px;
+    background:#f8fafc; color:#17283e; }
+  button:disabled {cursor:not-allowed;opacity:.5;}
   button.primary {background:#1668a5;color:white;border-color:#1668a5;}
-  #status {font-size:14px;text-align:center;min-height:40px;max-width:360px;}
+  .settings {font-size:14px;display:flex;align-items:center;gap:8px;}
+  input[type=checkbox] {width:18px;height:18px;accent-color:#1668a5;}
+  #status {font-size:14px;text-align:center;max-width:420px;min-height:42px;
+    line-height:1.5;padding:0 4px;}
+  #counter {font-size:14px;font-weight:600;color:#334155;}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div id="target" aria-label="한자 쓰기 영역"></div>
-  <div class="actions">
-    <button id="animate" disabled>① 획순 보기</button>
-    <button id="quiz" class="primary" disabled>② 직접 써보기</button>
+  <div id="counter">획순 데이터를 읽는 중...</div>
+  <div class="board">
+    <div id="target" aria-label="한자 쓰기 영역"></div>
+    <svg id="numbers" xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 280 280" aria-hidden="true"></svg>
+  </div>
+  <label class="settings">
+    <input id="showNumbers" type="checkbox" checked /> 획순 숫자 표시
+  </label>
+  <div class="toolbar">
+    <button id="animate" disabled>① 번호와 함께 보기</button>
+    <button id="all" disabled>② 전체 번호 보기</button>
+    <button id="quiz" class="primary" disabled>③ 직접 써보기</button>
     <button id="retry" disabled>다시 쓰기</button>
   </div>
-  <div id="status" role="status">획순 데이터를 불러오는 중입니다…</div>
+  <div id="status" role="status" aria-live="polite">데이터를 불러오는 중입니다…</div>
 </div>
 <script>
-  const char = __CHAR_JSON__;
-  const statusEl = document.getElementById('status');
-  const buttons = ['animate','quiz','retry'].map(id => document.getElementById(id));
-  const status = text => {statusEl.textContent = text;};
-  if (typeof HanziWriter === 'undefined') {
-    status('획순 프로그램을 불러오지 못했습니다. 인터넷 연결을 확인하세요.');
-  } else {
-    const writer = HanziWriter.create('target', char, {
-      width: 280, height: 280, padding: 18,
-      showCharacter: false, showOutline: true,
-      strokeColor: '#1d4ed8', outlineColor: '#d1d5db',
-      drawingColor: '#2563eb', highlightColor: '#10b981',
-      strokeAnimationSpeed: 1, delayBetweenStrokes: 400,
-      onLoadCharDataSuccess: () => {
-        buttons.forEach(button => button.disabled = false);
-        status('① 획순을 먼저 보고 ② 직접 써보세요.');
-      },
-      onLoadCharDataError: () => status('이 한자의 획순 데이터를 불러오지 못했습니다.'),
+'use strict';
+const char = __CHAR_JSON__;
+const expectedCount = __EXPECTED_COUNT__;
+const SIZE = 280;
+const PAD = 18;
+const svgNS = 'http://www.w3.org/2000/svg';
+const overlay = document.getElementById('numbers');
+const counter = document.getElementById('counter');
+const numberToggle = document.getElementById('showNumbers');
+const statusEl = document.getElementById('status');
+const buttons = ['animate','all','quiz','retry'].map(id => document.getElementById(id));
+const status = text => {statusEl.textContent = text;};
+let writer;
+let strokeCount = 0;
+let numberLocations = [];
+let visibleCount = 0;
+let mode = 'idle';
+let busy = false;
+let validNumberData = false;
+
+function setBusy(value) {
+  busy = value;
+  buttons.forEach(b => b.disabled = value || !strokeCount);
+}
+function clamp(n, lo, hi) {return Math.max(lo,Math.min(hi,n));}
+function positionLabels(medians) {
+  // 공식 getScalingTransform()과 동일한 좌표계를 사용합니다.
+  // 데이터 Y축은 위로 증가하므로 화면 Y축은 y - dataY * scale.
+  const t = HanziWriter.getScalingTransform(SIZE,SIZE,PAD);
+  const centers = [];
+  return medians.map((points, index) => {
+    if (!Array.isArray(points) || !Array.isArray(points[0]) || points[0].length < 2)
+      throw new Error('획의 중심선 좌표가 없습니다: ' + (index+1));
+    const first = points[0];
+    const second = (points.length > 1 ? points[1] : first);
+    const sx = t.x + first[0]*t.scale;
+    const sy = t.y - first[1]*t.scale;
+    const vx = (second[0]-first[0])*t.scale;
+    const vy = -(second[1]-first[1])*t.scale;
+    const mag = Math.hypot(vx,vy) || 1;
+    const tx = vx/mag, ty=vy/mag;
+    // 첫획 근처에 놓되 이미 놓인 번호와 겹치지 않는 후보를 선택합니다.
+    const nx=-ty, ny=tx;
+    const shifts = [[-12,13],[-12,-13],[-23,0],[0,19],[0,-19],[-22,22],[13,23],[23,-15]];
+    let best = null;
+    shifts.forEach(([along,side]) => {
+      const x=clamp(sx + tx*along + nx*side,14,SIZE-14);
+      const y=clamp(sy + ty*along + ny*side,14,SIZE-14);
+      const collision=centers.reduce((sum,c)=>sum+Math.max(0,26-Math.hypot(x-c.x,y-c.y))**2,0);
+      const penalty=collision + Math.hypot(x-sx,y-sy)*0.15;
+      if (!best || penalty<best.penalty) best={x,y,penalty};
     });
-    document.getElementById('animate').addEventListener('click', () => {
-      writer.cancelQuiz();
-      status('한 획씩 순서대로 보여드릴게요.');
-      writer.animateCharacter();
-    });
-    function beginQuiz() {
-      status('글자의 회색 윤곽을 따라 첫 획부터 써보세요.');
-      writer.quiz({
-        showHintAfterMisses: 2,
-        leniency: 1.2,
-        onCorrectStroke: data => {
-          status('좋아요! 남은 획: ' + data.strokesRemaining);
-        },
-        onMistake: () => {
-          status('순서나 방향을 다시 확인해 보세요. 두 번 틀리면 힌트가 나와요.');
-        },
-        onComplete: data => {
-          status('완성했어요! ' + (data.totalMistakes === 0
-            ? '한 번에 성공했습니다!' : '틀린 획 ' + data.totalMistakes + '회 · 다시 도전해 보세요.'));
-        },
-      });
+    centers.push(best);
+    return {x:best.x, y:best.y, number:index+1};
+  });
+}
+function paintNumbers() {
+  overlay.replaceChildren();
+  if (!numberToggle.checked || mode === 'quiz' || !validNumberData) return;
+  numberLocations.slice(0,visibleCount).forEach(item => {
+    const g=document.createElementNS(svgNS,'g');
+    const circle=document.createElementNS(svgNS,'circle');
+    circle.setAttribute('cx',String(item.x));
+    circle.setAttribute('cy',String(item.y));
+    circle.setAttribute('r','12');
+    circle.setAttribute('fill','#fff');
+    circle.setAttribute('stroke','#12699d');
+    circle.setAttribute('stroke-width','1.8');
+    const text=document.createElementNS(svgNS,'text');
+    text.setAttribute('x',String(item.x));
+    text.setAttribute('y',String(item.y+4.5));
+    text.setAttribute('font-size',item.number<10?'12':'10');
+    text.setAttribute('font-weight','700');
+    text.setAttribute('text-anchor','middle');
+    text.setAttribute('fill','#12699d');
+    text.textContent=String(item.number);
+    g.append(circle,text);
+    overlay.appendChild(g);
+  });
+}
+function setVisible(count) {
+  visibleCount=clamp(count,0,strokeCount);
+  paintNumbers();
+}
+async function playWithNumbers() {
+  if(busy || !writer) return;
+  mode='animation';
+  setBusy(true);
+  setVisible(0);
+  try {
+    writer.cancelQuiz();
+    await writer.hideCharacter({duration:0});
+    for (let i=0; i<strokeCount; i++) {
+      counter.textContent='현재 '+(i+1)+' / '+strokeCount+'획';
+      // 애니메이션과 번호의 인덱스를 동일하게 유지합니다.
+      setVisible(i+1); // 다음 획의 번호를 먼저 표시한 뒤 획을 그립니다.
+      await writer.animateStroke(i);
     }
-    document.getElementById('quiz').addEventListener('click', beginQuiz);
-    document.getElementById('retry').addEventListener('click', beginQuiz);
+    counter.textContent='총 '+strokeCount+'획';
+    status('모든 획을 순서대로 확인했어요. 이제 직접 써보세요!');
+  } catch(error) {
+    status('획순 재생 중 오류가 발생했습니다: '+String(error));
+  } finally {
+    setBusy(false);
   }
+}
+async function showAll() {
+  if(busy || !writer) return;
+  mode='all';
+  setBusy(true);
+  try {
+    writer.cancelQuiz();
+    await writer.showCharacter({duration:0});
+    setVisible(strokeCount);
+    counter.textContent='총 '+strokeCount+'획';
+    status('한자 전체와 각 획의 시작 위치를 숫자로 표시했습니다.');
+  } finally {
+    setBusy(false);
+  }
+}
+function beginQuiz() {
+  if(busy || !writer) return;
+  mode='quiz';
+  setVisible(0);   // 쓰기 판정 중에는 숫자가 입력을 가리지 않도록 숨김
+  counter.textContent='손가락 또는 터치펜으로 써보세요.';
+  status('첫 획부터 직접 써보세요. 틀린 획은 두 번 실수하면 힌트가 나타납니다.');
+  writer.cancelQuiz();
+  writer.quiz({
+    showHintAfterMisses:2,
+    leniency:1.2,
+    onCorrectStroke: data => {
+      counter.textContent=(data.strokeNum+1)+' / '+strokeCount+'획 완료';
+      status('좋아요! 남은 획: '+data.strokesRemaining);
+    },
+    onMistake: data => {
+      status((data.strokeNum+1)+'획의 순서나 방향을 다시 확인해 보세요.');
+    },
+    onComplete: data => {
+      counter.textContent='총 '+strokeCount+'획 완성';
+      status(data.totalMistakes===0
+        ? '완성! 한 번에 성공했어요!'
+        : '완성! 틀린 획 '+data.totalMistakes+'회 · 다시 도전해 보세요.');
+    },
+  });
+}
+numberToggle.addEventListener('change',paintNumbers);
+if (typeof HanziWriter === 'undefined') {
+  status('획순 프로그램을 불러오지 못했습니다. 인터넷 연결을 확인하세요.');
+} else {
+  writer=HanziWriter.create('target',char,{
+    width:SIZE,height:SIZE,padding:PAD,
+    showCharacter:false,showOutline:true,
+    strokeColor:'#1d4ed8',outlineColor:'#d1d5db',
+    drawingColor:'#2563eb',highlightColor:'#10b981',
+    strokeAnimationSpeed:1,delayBetweenStrokes:250,
+    onLoadCharDataSuccess: data => {
+      strokeCount=data.strokes.length;
+      counter.textContent='총 '+strokeCount+'획';
+      if (strokeCount!==expectedCount || !Array.isArray(data.medians) || data.medians.length!==strokeCount) {
+        validNumberData=false;
+        status('획수 또는 획순 데이터가 기준값과 일치하지 않아 번호 표시를 중지했습니다.');
+      } else {
+        try {
+          numberLocations=positionLabels(data.medians);
+          validNumberData=true;
+          status('① 번호와 함께 보기 → ② 전체 번호 보기 → ③ 직접 써보기');
+        } catch(error) {
+          validNumberData=false;
+          status('숫자 좌표를 생성할 수 없어 획순만 표시합니다.');
+        }
+      }
+      setBusy(false);
+    },
+    onLoadCharDataError: () => status('획순 데이터를 불러오지 못했습니다. 인터넷 연결을 확인하세요.'),
+  });
+  document.getElementById('animate').addEventListener('click',playWithNumbers);
+  document.getElementById('all').addEventListener('click',showAll);
+  document.getElementById('quiz').addEventListener('click',beginQuiz);
+  document.getElementById('retry').addEventListener('click',beginQuiz);
+}
 </script>
 </body>
 </html>
-'''.replace("__CHAR_JSON__", char_js)
-    components.html(html, height=445, scrolling=False)
+'''.replace("__CHAR_JSON__", char_js).replace("__EXPECTED_COUNT__", expected_js)
+    components.html(html, height=492, scrolling=False)
     st.caption(
-        "쓰기 결과는 현재 화면에서만 표시됩니다. "
-        "v1.1에서는 점수·별·학습 진도에 아직 연결되지 않습니다."
+        "학습 범위: 山·木·人·日·水 5자 시범. 숫자는 각 획 시작점 근처에 표시됩니다. "
+        "쓰기 성공 여부는 아직 별·점수·학습기록에 연결되지 않습니다."
     )
 
 st.markdown("""
@@ -555,4 +711,4 @@ else:
     page_records()
 
 st.divider()
-st.caption("한자 탐험대 v1.1 · 개인 학습용 · 실제 시험 문항을 재현한 공식 모의고사는 아닙니다.")
+st.caption("한자 탐험대 v1.1.1 · 개인 학습용 · 실제 시험 문항을 재현한 공식 모의고사는 아닙니다.")
