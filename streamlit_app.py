@@ -1,4 +1,4 @@
-"""한자 탐험대 v1.1.6 | 퀴즈 선택지 큰 버튼 개선."""
+"""한자 탐험대 v1.2.0 | 드래곤 가디언즈: 진화·기술·한자 배틀."""
 
 import json
 import random
@@ -10,7 +10,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="한자 탐험대 v1.1.6",
+    page_title="한자 탐험대 v1.2.0",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -77,8 +77,130 @@ def today():
     return datetime.now(ZoneInfo("Asia/Seoul")).date()
 
 
+# 판타지 게임 설정: 한자 진화 계보와 포켓몬 기술에서 영감받은 독창적인 기술 이름.
+# 해금 숫자는 '신규 한자 5자짜리 단원'의 완료 횟수입니다.
+DRAGONS = {
+    "fire": {"name": "화루", "kind": "불", "color": "#DF7443", "icon": "🔥",
+             "hanja": ["火", "炎", "焱"],
+             "forms": ["꼬마 불꽃룡", "붉은 날개룡", "화염 수호룡"]},
+    "water": {"name": "수루", "kind": "물", "color": "#327FBF", "icon": "💧",
+              "hanja": ["水", "江", "海"],
+              "forms": ["물방울룡", "강물날개룡", "대해 수호룡"]},
+    "forest": {"name": "그루", "kind": "숲", "color": "#3A9565", "icon": "🌿",
+               "hanja": ["木", "林", "森"],
+               "forms": ["새싹룡", "숲날개룡", "고대 숲 수호룡"]},
+}
+# (완료 단원 수, 필요한 진화 단계, 기술명, 참고 기술)
+SKILL_TREE = {
+    "fire": [
+        (0,1,"불씨탄","불꽃세례"),(2,1,"화염송곳니","불꽃엄니"),
+        (4,1,"불꽃소용돌이","회오리불꽃"),(8,2,"화염숨결","화염방사"),
+        (11,2,"용의열풍","열풍"),(14,2,"폭염날개","강화 불꽃 공격"),
+        (17,3,"대화염진","불대문자"),(20,3,"태양폭발","최종 필살기"),
+    ],
+    "water": [
+        (0,1,"물방울탄","거품"),(2,1,"물대포","물대포"),
+        (4,1,"거품파동","거품광선"),(8,2,"강물파동","물의파동"),
+        (11,2,"파도꼬리","아쿠아테일"),(14,2,"급류돌진","아쿠아제트"),
+        (17,3,"대해분출","하이드로펌프"),(20,3,"해룡의격류","최종 필살기"),
+    ],
+    "forest": [
+        (0,1,"새싹채찍","덩굴채찍"),(2,1,"씨앗탄","씨기관총"),
+        (4,1,"잎날검","잎날가르기"),(8,2,"덩굴회오리","덩굴채찍"),
+        (11,2,"꽃잎폭풍","꽃잎댄스"),(14,2,"대지의뿌리","씨뿌리기"),
+        (17,3,"숲의광선","에너지볼"),(20,3,"태양의숨결","솔라빔"),
+    ],
+}
+
+
+def fresh_game():
+    return {"starter": None, "active": None, "owned": [],
+            "xp": 0, "won_battles": []}
+
+
+def completed_unit_count(progress):
+    learned = set(progress.get("learned", []))
+    return sum(all(item["char"] in learned for item in NEW[i*5:(i+1)*5])
+               for i in range(20))
+
+
+def evolution_stage(unit_count, unique_wins):
+    if unit_count >= 15 and unique_wins >= 3:
+        return 3
+    if unit_count >= 5 and unique_wins >= 1:
+        return 2
+    return 1
+
+
+def unlocked_skills(dragon_key, unit_count, stage):
+    return [(minimum, required, skill, source)
+            for minimum, required, skill, source in SKILL_TREE[dragon_key]
+            if unit_count >= minimum and stage >= required]
+
+
+def update_dragon_ownership(game, unit_count):
+    # 선택한 첫 드래곤 외의 두 마리는 10·20개 단원 보상으로 열립니다.
+    starter = game.get("starter")
+    if starter not in DRAGONS:
+        return
+    others = [key for key in DRAGONS if key != starter]
+    game["owned"] = list(dict.fromkeys(
+        [starter] + ([others[0]] if unit_count >= 10 else []) +
+        ([others[1]] if unit_count >= 20 else [])
+    ))
+    if game.get("active") not in game["owned"]:
+        game["active"] = starter
+
+
+def new_dragon_question(target):
+    # 문제 한자를 크게 표시하므로 정답 한자가 그대로 노출되는 '한자 찾기' 유형은 제외.
+    kind = random.choice(["훈음", "뜻"])
+    if kind == "훈음":
+        answer, values = label(target), [label(x) for x in ALL]
+        title = "이 한자의 뜻과 음을 고르세요."
+    else:
+        answer, values = target["meaning"], [x["meaning"] for x in ALL]
+        title = "이 한자의 뜻은 무엇일까요?"
+    wrong = list(dict.fromkeys(v for v in values if v != answer))
+    choices = random.sample(wrong, 3) + [answer]
+    random.shuffle(choices)
+    return {"char": target["char"], "title": title,
+            "answer": answer, "choices": choices, "kind": kind}
+
+
+def battle_scope_pool(progress, selection):
+    if selection == "8급 복습":
+        return GROUPS["8급"]
+    if selection == "학습 완료 한자":
+        learned = set(progress.get("learned", []))
+        return [item for item in ALL if item["char"] in learned]
+    if selection.startswith("신규 ") and selection.endswith("단원"):
+        unit = int(selection.split()[1].removesuffix("단원"))
+        if 1 <= unit <= 20:
+            return NEW[(unit-1)*5:unit*5]
+    return []
+
+
+def fresh_battle(pool, scope, serial):
+    if len(pool) < 5:
+        raise ValueError("한자 배틀은 서로 다른 5자가 있어야 시작할 수 있습니다.")
+    return {"scope":scope, "serial": serial,
+            "questions":[new_dragon_question(x) for x in random.sample(pool,5)],
+            "index":0, "correct":0, "selected":None, "answered":False,
+            "last_correct":False, "last_skill":"", "rewarded":False}
+
+
+def award_first_win(game, scope):
+    # 같은 배틀의 무한 반복으로 드래곤 경험치를 쌓는 것을 방지.
+    if scope in game["won_battles"]:
+        return False
+    game["won_battles"].append(scope)
+    game["xp"] += 30
+    return True
+
+
 def fresh_progress():
-    return {"learned": [], "cards": {}, "xp": 0, "active_days": []}
+    return {"learned": [], "cards": {}, "xp": 0, "active_days": [], "game": fresh_game()}
 
 
 if "progress" not in st.session_state:
@@ -384,6 +506,20 @@ def restore_progress(data):
             "correct_dates": [str(d) for d in item.get("correct_dates", [])],
             "due": str(item.get("due", today().isoformat())),
         }
+    # v1.0~v1.1.6 백업에는 game이 없어도 정상 복원합니다.
+    original_game = data.get("game", {})
+    if isinstance(original_game, dict):
+        starter = original_game.get("starter")
+        if starter in DRAGONS:
+            cleaned["game"]["starter"] = starter
+            cleaned["game"]["active"] = original_game.get("active", starter)
+        cleaned["game"]["xp"] = max(0, int(original_game.get("xp", 0)))
+        battles = original_game.get("won_battles", [])
+        if isinstance(battles, list):
+            cleaned["game"]["won_battles"] = list(dict.fromkeys(
+                x for x in battles if isinstance(x,str) and len(x) <= 50
+            ))[:25]
+        update_dragon_ownership(cleaned["game"], completed_unit_count(cleaned))
     return cleaned
 
 
@@ -418,7 +554,7 @@ def page_records():
     st.divider()
     st.markdown("**학습기록 백업 및 복원**")
     st.warning("무료 Streamlit 서버의 세션 데이터는 영구 저장이 아닙니다. 학습 후 반드시 백업 파일을 내려받아 보관하세요.")
-    backup = json.dumps({"version": "1.0", "progress": progress},
+    backup = json.dumps({"version": "1.2.0", "progress": progress},
                         ensure_ascii=False, indent=2)
     st.download_button("학습기록 JSON 다운로드", data=backup,
                        file_name=f"hanja_progress_{today().isoformat()}.json",
@@ -429,6 +565,7 @@ def page_records():
             payload = json.loads(upload.getvalue().decode("utf-8-sig"))
             st.session_state.progress = restore_progress(payload["progress"])
             st.session_state.quiz = None
+            st.session_state.dragon_battle = None
             st.success("학습기록 복원을 완료했습니다.")
         except (ValueError, TypeError, KeyError, AttributeError) as error:
             st.error(f"파일을 복원하지 못했습니다: {error}")
@@ -438,7 +575,172 @@ def page_records():
         if st.button("기록 삭제", disabled=not confirm):
             st.session_state.progress = fresh_progress()
             st.session_state.quiz = None
+            st.session_state.dragon_battle = None
             st.rerun()
+
+
+def page_dragons():
+    """기존 학습·퀴즈와 분리된 드래곤 배틀 화면."""
+    st.subheader("드래곤 가디언즈")
+    st.caption("한자 5개를 풀어 드래곤을 성장시키고 새로운 기술을 배우세요.")
+    progress = st.session_state.progress
+    game = progress.setdefault("game", fresh_game())
+    units = completed_unit_count(progress)
+    update_dragon_ownership(game, units)
+
+    if game["starter"] not in DRAGONS:
+        st.markdown("### 함께 모험할 아기 드래곤을 선택하세요")
+        st.info("첫 드래곤을 선택해도 나머지 두 드래곤은 10단원·20단원 보상으로 얻을 수 있어요.")
+        cols = st.columns(3)
+        for idx, (key, dragon) in enumerate(DRAGONS.items()):
+            with cols[idx]:
+                st.markdown(
+                    f'<div class="dragon-pick-card">'
+                    f'<div class="dragon-icon">{dragon["icon"]} 🐉</div>'
+                    f'<div class="dragon-big-hanja">{dragon["hanja"][0]}</div>'
+                    f'<strong>{dragon["name"]}</strong>'
+                    f'<small>{dragon["kind"]} · {dragon["forms"][0]}</small>'
+                    '</div>', unsafe_allow_html=True,
+                )
+                if st.button(f"{dragon['name']} 선택", key=f"dragon_starter_{key}",
+                             type="primary", use_container_width=True):
+                    game["starter"] = key
+                    game["active"] = key
+                    update_dragon_ownership(game, units)
+                    st.rerun()
+        return
+
+    options = game["owned"]
+    chosen = st.selectbox("내 드래곤", options,
+                          index=options.index(game["active"]),
+                          format_func=lambda k: f"{DRAGONS[k]['icon']} {DRAGONS[k]['name']}",
+                          key="dragon_active_selector")
+    game["active"] = chosen
+    dragon = DRAGONS[chosen]
+    wins = len(game["won_battles"])
+    stage = evolution_stage(units, wins)
+    skills = unlocked_skills(chosen, units, stage)
+
+    st.markdown(
+        f'<div class="dragon-hero-card" style="--dragon-accent:{dragon["color"]}">'
+        f'<div class="dragon-avatar">{dragon["icon"]} 🐉</div>'
+        f'<div><div class="dragon-subtitle">{dragon["kind"]} 드래곤 · {stage}단계 진화</div>'
+        f'<div class="dragon-hero-name">{dragon["name"]} · {dragon["forms"][stage-1]}</div>'
+        f'<div class="dragon-hero-hanja">{dragon["hanja"][stage-1]}</div>'
+        '</div></div>', unsafe_allow_html=True,
+    )
+    a,b,c,d=st.columns(4)
+    a.metric("완료한 신규 단원", f"{units}/20")
+    b.metric("해금 기술", f"{len(skills)}/8")
+    c.metric("드래곤 경험치", f"{game['xp']:,} XP")
+    d.metric("승리한 배틀", f"{wins}개")
+    st.progress(units/20)
+    st.caption(f"드래곤 레벨 {1 + game['xp'] // 60} · 다음 레벨까지 {60 - game['xp'] % 60} XP")
+    if stage == 1:
+        st.caption("1차 진화: 신규 단원 5개 학습 완료 + 서로 다른 배틀 1회 승리")
+    elif stage == 2:
+        st.caption("최종 진화: 신규 단원 15개 학습 완료 + 서로 다른 배틀 3회 승리")
+    else:
+        st.success("최종 진화 달성! 전설의 수호 드래곤과 함께하세요.")
+
+    with st.expander("기술 도감 · 해금 조건", expanded=False):
+        for requirement, min_stage, move, reference in SKILL_TREE[chosen]:
+            available = units >= requirement and stage >= min_stage
+            state = "습득 완료" if available else f"잠김 · {requirement}단원, 진화 {min_stage}단계"
+            st.write(f"{'✅' if available else '🔒'} **{move}** — {state}")
+        st.caption("기술들은 파이리·꼬부기·이상해씨의 기술에서 영감을 받아 새롭게 명명했습니다.")
+
+    battle = st.session_state.get("dragon_battle")
+    if battle is None:
+        st.divider()
+        st.markdown("### 한자 배틀 시작")
+        scopes = ["8급 복습"] + [f"신규 {n}단원" for n in range(1,21)]
+        if len(progress.get("learned", [])) >= 5:
+            scopes.insert(1,"학습 완료 한자")
+        scope = st.selectbox("배틀 학습 범위", scopes, key="dragon_battle_scope")
+        pool = battle_scope_pool(progress, scope)
+        st.caption("5문제 중 4문제 이상 정답이면 승리! 처음 승리한 범위마다 경험치 30점을 받습니다.")
+        if st.button("드래곤 배틀 시작", type="primary", use_container_width=True,
+                     disabled=len(pool)<5):
+            st.session_state.dragon_battle_serial = st.session_state.get("dragon_battle_serial",0)+1
+            st.session_state.dragon_battle=fresh_battle(
+                pool, scope, st.session_state.dragon_battle_serial)
+            st.rerun()
+        return
+
+    st.divider()
+    st.markdown(f"### {battle['scope']} · 한자 배틀")
+    n=len(battle["questions"])
+    index=battle["index"]
+    if index >= n:
+        won=battle["correct"]>=4
+        if not battle["rewarded"]:
+            battle["new_reward"] = award_first_win(game, battle["scope"]) if won else False
+            battle["rewarded"]=True
+        if won:
+            st.success(f"배틀 승리! {n}문제 중 {battle['correct']}문제 정답")
+        else:
+            st.warning(f"배틀 종료 · {n}문제 중 {battle['correct']}문제 정답. 복습하고 다시 도전해요!")
+        if battle.get("new_reward"):
+            st.info("처음 승리한 범위! 드래곤 경험치 +30 XP")
+        elif won:
+            st.caption("이 범위의 첫 승리 보상은 이미 받았어요. 재도전은 언제든 가능합니다.")
+        if st.button("다른 배틀 선택", type="primary", use_container_width=True):
+            st.session_state.dragon_battle=None
+            st.rerun()
+        return
+
+    st.progress(index/n)
+    st.caption(f"문제 {index+1} / {n} · 현재 정답 {battle['correct']}개")
+    q=battle["questions"][index]
+    col1,col2=st.columns([1,1])
+    with col1:
+        st.markdown(f'<div class="battle-fighter">{dragon["icon"]} 🐉<br>'
+                    f'<span>{dragon["name"]}</span></div>', unsafe_allow_html=True)
+    with col2:
+        enemy_hp=max(0,100-25*battle["correct"])
+        st.markdown('<div class="battle-fighter battle-enemy">👾<br>'
+                    f'<span>상대 몬스터 · HP {enemy_hp}/100</span></div>',
+                    unsafe_allow_html=True)
+    st.markdown(f'<div class="battle-char">{escape(q["char"])}</div>',unsafe_allow_html=True)
+    st.markdown(f'<div class="battle-prompt">{escape(q["title"])}</div>',unsafe_allow_html=True)
+
+    if not battle["answered"]:
+        move = st.selectbox("사용할 기술", [x[2] for x in skills],
+                            index=len(skills)-1,
+                            key=f"dragon_move_{battle['serial']}_{index}")
+        with st.container(key="dragon_answers"):
+            for i, option in enumerate(q["choices"]):
+                if st.button(f"{i+1}.  {option}", key=f"dragon_answer_{battle['serial']}_{index}_{i}",
+                             type="primary" if battle["selected"]==option else "secondary",
+                             use_container_width=True):
+                    battle["selected"]=option
+                    st.rerun()
+        if st.button(f"{move} 사용하기!", type="primary",
+                     disabled=battle["selected"] is None, use_container_width=True):
+            correct=battle["selected"]==q["answer"]
+            register_answer(q["char"],correct)
+            battle["answered"]=True
+            battle["last_correct"]=correct
+            battle["last_skill"]=move
+            if correct:
+                battle["correct"]+=1
+            st.rerun()
+    else:
+        if battle["last_correct"]:
+            st.success(f"{battle['last_skill']} 성공! 정답입니다. 상대 몬스터에게 피해를 주었어요!")
+        else:
+            st.error(f"이번엔 빗나갔어요. 정답은 '{q['answer']}'입니다.")
+        if st.button("다음 문제" if index+1<n else "배틀 결과 보기",
+                     type="primary", use_container_width=True):
+            battle["index"]+=1
+            battle["selected"]=None
+            battle["answered"]=False
+            st.rerun()
+    if st.button("현재 배틀 종료", type="secondary"):
+        st.session_state.dragon_battle=None
+        st.rerun()
+    st.caption("캐릭터는 임시 아이콘입니다. 원본 드래곤 그림과 기술 애니메이션은 이후 버전에 적용합니다.")
 
 
 def page_writing():
@@ -874,6 +1176,45 @@ div.stButton > button, div.stDownloadButton > button {min-height:54px;border-rad
   .st-key-stroke_unit_buttons div.stButton > button {min-height:78px;font-size:37px;}
   .selected-hanja-banner {padding:12px 15px;gap:14px;}
 }
+
+/* 드래곤 가디언즈: v1.1.6 퀴즈·획순 스타일은 변경하지 않습니다. */
+.dragon-pick-card{background:#fff;min-height:213px;border:2px solid #D8E8EE;
+  border-radius:20px;padding:18px 12px;text-align:center;display:flex;
+  flex-direction:column;align-items:center;gap:8px;margin-bottom:10px;}
+.dragon-pick-card strong{font-size:25px;color:#243D52;}
+.dragon-pick-card small{font-size:14px;color:#597386;}
+.dragon-icon{font-size:48px;}.dragon-big-hanja{font-size:49px;font-weight:800;color:#237D86;}
+.dragon-hero-card{display:flex;align-items:center;gap:26px;padding:22px 26px;
+  border-radius:24px;background:#fff;border:2px solid var(--dragon-accent);
+  margin-bottom:15px;box-shadow:0 8px 18px rgba(30,70,95,.07);}
+.dragon-avatar{font-size:76px;white-space:nowrap;}
+.dragon-subtitle{font-size:15px;color:#5A788B;font-weight:800;}
+.dragon-hero-name{font-size:clamp(24px,3.3vw,37px);font-weight:900;color:#223952;}
+.dragon-hero-hanja{font-size:clamp(50px,7vw,77px);font-weight:800;color:var(--dragon-accent);}
+.battle-fighter{border:2px solid #D7E6EE;border-radius:20px;background:#fff;
+  padding:16px 8px;text-align:center;font-size:55px;min-height:138px;}
+.battle-fighter span{font-size:17px;color:#38586D;font-weight:800;}
+.battle-enemy{background:#FFF8F4;}
+.battle-char{background:white;border:2px solid #CFE4EB;border-radius:22px;
+  font-size:clamp(135px,20vw,185px);font-family:serif;text-align:center;
+  line-height:1.35;margin:16px 0 5px;color:#253A54;}
+.battle-prompt{text-align:center;font-size:clamp(23px,3vw,32px);
+  font-weight:900;margin:11px 0 18px;color:#243F58;}
+.st-key-dragon_answers div.stButton>button{width:100%!important;min-height:77px!important;
+  font-size:clamp(24px,3vw,34px)!important;border:2px solid #BFD9E5!important;
+  border-radius:16px!important;text-align:left!important;justify-content:flex-start!important;}
+.st-key-dragon_answers div.stButton>button p{font-size:inherit!important;font-weight:800!important;}
+@media(max-width:680px){
+  .dragon-hero-card{padding:12px;gap:10px;}
+  .dragon-avatar{font-size:45px;}
+  .battle-fighter{font-size:38px;min-height:105px;}
+  .battle-fighter span{font-size:12px;}
+  .dragon-pick-card{padding:10px 6px;min-height:174px;}
+  .dragon-icon{font-size:30px;}.dragon-big-hanja{font-size:35px;}
+  .dragon-pick-card strong{font-size:18px;}
+  .dragon-pick-card small{font-size:11px;}
+  .st-key-dragon_answers div.stButton>button{min-height:85px!important;font-size:28px!important;}
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -884,7 +1225,7 @@ st.markdown("""
   <p>8급 합격에서 7급 도전까지 · 하루 5자씩 차근차근 배우고 써봐요</p>
 </section>
 """, unsafe_allow_html=True)
-menu = st.radio("메뉴", ["홈", "한자 학습", "획순 쓰기", "퀴즈", "복습", "학습 기록"],
+menu = st.radio("메뉴", ["홈", "한자 학습", "획순 쓰기", "퀴즈", "복습", "드래곤 게임", "학습 기록"],
                 horizontal=True, label_visibility="collapsed", key="main_nav")
 st.divider()
 if menu == "홈":
@@ -897,8 +1238,10 @@ elif menu == "퀴즈":
     page_quiz()
 elif menu == "복습":
     page_review()
+elif menu == "드래곤 게임":
+    page_dragons()
 else:
     page_records()
 
 st.divider()
-st.caption("한자 탐험대 v1.1.6 · 개인 학습용 · 실제 시험 문항을 재현한 공식 모의고사는 아닙니다.")
+st.caption("한자 탐험대 v1.2.0 · 개인 학습용 · 실제 시험 문항을 재현한 공식 모의고사는 아닙니다.")
