@@ -1,4 +1,4 @@
-"""한자 탐험대 v1.1.1 | 한국어문회 8급 복습 + 7급 학습."""
+"""한자 탐험대 v1.1.2 | 한국어문회 8급 복습 + 7급 학습."""
 
 import json
 import random
@@ -9,7 +9,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="한자 탐험대 v1.1.1",
+    page_title="한자 탐험대 v1.1.2",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -516,8 +516,9 @@ function setBusy(value) {
 }
 function clamp(n, lo, hi) {return Math.max(lo,Math.min(hi,n));}
 function positionLabels(medians) {
-  // 공식 getScalingTransform()과 동일한 좌표계를 사용합니다.
-  // 데이터 Y축은 위로 증가하므로 화면 Y축은 y - dataY * scale.
+  // Hanzi Writer 반환값 t.y는 SVG에 적용할 translateY가 아니라 yOffset입니다.
+  // 실제 SVG transform은 translate(t.x, SIZE - t.y) scale(t.scale, -t.scale).
+  // 따라서 화면 좌표로 변환할 때 Y축은 SIZE - t.y - rawY * t.scale로 계산합니다.
   const t = HanziWriter.getScalingTransform(SIZE,SIZE,PAD);
   const centers = [];
   return medians.map((points, index) => {
@@ -526,12 +527,12 @@ function positionLabels(medians) {
     const first = points[0];
     const second = (points.length > 1 ? points[1] : first);
     const sx = t.x + first[0]*t.scale;
-    const sy = t.y - first[1]*t.scale;
+    const sy = SIZE - t.y - first[1]*t.scale;
     const vx = (second[0]-first[0])*t.scale;
     const vy = -(second[1]-first[1])*t.scale;
     const mag = Math.hypot(vx,vy) || 1;
     const tx = vx/mag, ty=vy/mag;
-    // 첫획 근처에 놓되 이미 놓인 번호와 겹치지 않는 후보를 선택합니다.
+    // 각 획의 실제 시작점 옆에 배치하고, 앞서 배치한 숫자와 겹침을 줄입니다.
     const nx=-ty, ny=tx;
     const shifts = [[-12,13],[-12,-13],[-23,0],[0,19],[0,-19],[-22,22],[13,23],[23,-15]];
     let best = null;
@@ -676,7 +677,7 @@ if (typeof HanziWriter === 'undefined') {
 '''.replace("__CHAR_JSON__", char_js).replace("__EXPECTED_COUNT__", expected_js)
     components.html(html, height=492, scrolling=False)
     st.caption(
-        "학습 범위: 山·木·人·日·水 5자 시범. 숫자는 각 획 시작점 근처에 표시됩니다. "
+        "학습 범위: 山·木·人·日·水 5자 시범. 숫자는 각 획 옆의 시작점 근처에 표시됩니다. "
         "쓰기 성공 여부는 아직 별·점수·학습기록에 연결되지 않습니다."
     )
 
@@ -711,4 +712,4 @@ else:
     page_records()
 
 st.divider()
-st.caption("한자 탐험대 v1.1.1 · 개인 학습용 · 실제 시험 문항을 재현한 공식 모의고사는 아닙니다.")
+st.caption("한자 탐험대 v1.1.2 · 개인 학습용 · 실제 시험 문항을 재현한 공식 모의고사는 아닙니다.")
