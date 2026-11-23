@@ -1,4 +1,4 @@
-"""한자 탐험대 v1.1.3 | 한국어문회 8급 복습 + 7급 학습."""
+"""한자 탐험대 v1.1.4 | 한국어문회 8급 복습 + 7급 학습."""
 
 import json
 import random
@@ -9,7 +9,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="한자 탐험대 v1.1.3",
+    page_title="한자 탐험대 v1.1.4",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -421,25 +421,72 @@ def page_records():
 
 
 def page_writing():
-    # 한자 획순 안내와 획 번호 오버레이 (기존 5자 시범).
+    # 한자 데이터는 기존 8급/7급Ⅱ/7급 150자를 재사용합니다.
+    # '학습 완료'는 학습 메뉴의 '익혔어요'로 표시한 한자만 의미합니다.
     st.subheader("획순 쓰기")
-    st.write("한 획씩 재생되는 순서에 맞춰 숫자를 확인하고, 직접 써보세요.")
-
-    # 공식 한국식 획순 검수를 마치기 전까지 시범 글자 5개만 사용.
-    stroke_count = {"山": 3, "木": 4, "人": 2, "日": 4, "水": 4}
-    char = st.selectbox(
-        "연습할 한자", list(stroke_count),
-        format_func=lambda c: f"{c} · {label(INDEX[c])}",
-        key="stroke_char",
+    st.write("단원별로 익히거나 배운 한자를 다시 골라, 획순을 확인하고 직접 써보세요.")
+    view = st.radio(
+        "연습 방식", ["단원별", "학습 완료", "전체 한자"],
+        horizontal=True, key="stroke_view",
     )
+    if view == "단원별":
+        grade = st.selectbox("급수 선택", ["7급Ⅱ", "7급", "8급"], key="stroke_grade")
+        unit = st.selectbox(
+            "단원 선택", list(range(1, 11)),
+            format_func=lambda x: f"{grade} · {x}단원 (5자)",
+            key="stroke_unit",
+        )
+        cards = GROUPS[grade][(unit - 1) * 5: unit * 5]
+        st.caption("해당 단원의 한자 5자를 모두 연습할 수 있습니다.")
+    elif view == "학습 완료":
+        learned = set(st.session_state.progress["learned"])
+        cards = [card for card in ALL if card["char"] in learned]
+        st.caption(f"학습 메뉴에서 '익혔어요'를 누른 한자: {len(cards)}자")
+        if not cards:
+            st.info("아직 학습 완료 표시된 한자가 없습니다. '한자 학습'에서 '익혔어요'를 눌러주세요. 8급 합격은 자동으로 50자 학습 완료 처리되지 않습니다.")
+            return
+    else:
+        grade = st.selectbox("검색 범위", ["전체 150자", "8급", "7급Ⅱ", "7급"], key="stroke_all_grade")
+        cards = ALL if grade == "전체 150자" else GROUPS[grade]
+        st.caption("목록을 클릭하고 한자를 입력하면 검색할 수 있습니다.")
+
+    if view == "단원별":
+        # 아이가 터치하기 쉽도록 5개 한자를 큰 버튼으로 표시합니다.
+        selection_id = f"stroke_unit_pick_{grade}_{unit}"
+        if st.session_state.get(selection_id) not in [c["char"] for c in cards]:
+            st.session_state[selection_id] = cards[0]["char"]
+        # 휴대폰에서도 누르기 쉽도록 첫 줄 3개, 둘째 줄 2개로 배치합니다.
+        for start in (0, 3):
+            row_cards = cards[start:start + 3]
+            cols = st.columns(len(row_cards))
+            for i, card in enumerate(row_cards):
+                with cols[i]:
+                    if st.button(
+                        card["char"], use_container_width=True,
+                        type="primary" if st.session_state[selection_id] == card["char"] else "secondary",
+                        key=f"stroke_pick_{grade}_{unit}_{card['char']}",
+                    ):
+                        st.session_state[selection_id] = card["char"]
+        char = st.session_state[selection_id]
+        st.caption(f"선택한 한자: {char} · {label(INDEX[char])}")
+    else:
+        # 완료한 한자와 전체 150자는 검색 가능한 목록이 더 편리합니다.
+        option_key = f"stroke_selection_{view}_{st.session_state.get('stroke_all_grade', '')}"
+        char = st.selectbox(
+            "연습할 한자", [card["char"] for card in cards],
+            format_func=lambda c: f"{c} · {label(INDEX[c])} ({INDEX[c]['grade']})",
+            key=option_key,
+        )
     st.info(
-        "시험 기능: 숫자는 Hanzi Writer의 획순 데이터와 정확히 같은 순서를 사용합니다. "
-        "해당 자료는 중국 한자 기반이므로 한국식 획순과의 완전한 일치 검증은 아직 끝나지 않았습니다."
+        "주의: 획순 애니메이션과 자동 판정은 Hanzi Writer의 중국식 데이터 기준입니다. "
+        "배정한자 150자를 선택할 수 있지만 한국식 획순 전체 검증은 아직 완료되지 않았습니다."
     )
 
-    # json.dumps로 입력을 JS 문자열 값으로 안전하게 전달.
+    # 수동으로 획수를 먼저 확인했던 5자만 별도 개수 검사합니다.
+    # 나머지는 라이브러리의 실제 획 데이터 개수로 숫자를 생성합니다.
+    checked_counts = {"山": 3, "木": 4, "人": 2, "日": 4, "水": 4}
     char_js = json.dumps(char, ensure_ascii=False)
-    expected_js = json.dumps(stroke_count[char])
+    expected_js = json.dumps(checked_counts.get(char))
     html = r'''
 <!DOCTYPE html>
 <html lang="ko">
@@ -650,9 +697,11 @@ if (typeof HanziWriter === 'undefined') {
     onLoadCharDataSuccess: data => {
       strokeCount=data.strokes.length;
       counter.textContent='총 '+strokeCount+'획';
-      if (strokeCount!==expectedCount || !Array.isArray(data.medians) || data.medians.length!==strokeCount) {
+      if (!Number.isInteger(strokeCount) || strokeCount<1 ||
+          !Array.isArray(data.medians) || data.medians.length!==strokeCount ||
+          (expectedCount!==null && strokeCount!==expectedCount)) {
         validNumberData=false;
-        status('획수 또는 획순 데이터가 기준값과 일치하지 않아 번호 표시를 중지했습니다.');
+        status('획 데이터가 불완전하거나 확인한 획수와 다릅니다. 번호 표시를 중지했습니다.');
       } else {
         try {
           numberLocations=positionLabels(data.medians);
@@ -678,8 +727,8 @@ if (typeof HanziWriter === 'undefined') {
 '''.replace("__CHAR_JSON__", char_js).replace("__EXPECTED_COUNT__", expected_js)
     components.html(html, height=492, scrolling=False)
     st.caption(
-        "학습 범위: 山·木·人·日·水 5자 시범. 숫자는 각 획 옆의 시작점 근처에 표시됩니다. "
-        "쓰기 성공 여부는 아직 별·점수·학습기록에 연결되지 않습니다."
+        "학습 범위: 8급부터 7급까지 150자 선택 지원. 숫자는 각 획 옆의 시작점 근처에 표시됩니다. "
+        "한국식 획순 검증 전 시범 적용이며 쓰기 성공 여부는 아직 별·점수·학습기록에 연결되지 않습니다."
     )
 
 st.markdown("""
@@ -713,4 +762,4 @@ else:
     page_records()
 
 st.divider()
-st.caption("한자 탐험대 v1.1.3 · 개인 학습용 · 실제 시험 문항을 재현한 공식 모의고사는 아닙니다.")
+st.caption("한자 탐험대 v1.1.4 · 개인 학습용 · 실제 시험 문항을 재현한 공식 모의고사는 아닙니다.")
