@@ -1,4 +1,4 @@
-"""한자 탐험대 v1.1.5 | 어린이 학습 UI 개선 및 큰 글자."""
+"""한자 탐험대 v1.1.6 | 퀴즈 선택지 큰 버튼 개선."""
 
 import json
 import random
@@ -10,7 +10,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="한자 탐험대 v1.1.5",
+    page_title="한자 탐험대 v1.1.6",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -219,12 +219,21 @@ def quiz_panel():
             f'<div class="quiz-prompt">{escape(question["title"])}</div>',
             unsafe_allow_html=True,
         )
-    key = f"answer_{quiz['serial']}_{quiz['index']}"
+    # 기본 라디오 버튼 대신 큰 선택 버튼을 사용합니다.
+    # Streamlit의 버전별 라디오 내부 HTML 구조와 무관하게 크기를 유지합니다.
     with st.container(key="quiz_choice_area"):
-        choice = st.radio(
-            "정답 선택", question["choices"], index=None,
-            label_visibility="collapsed", key=key, disabled=quiz["answered"],
-        )
+        for option_index, option in enumerate(question["choices"]):
+            active = quiz.get("selected") == option
+            if st.button(
+                f"{option_index + 1}.  {option}",
+                key=f"quiz_option_{quiz['serial']}_{quiz['index']}_{option_index}",
+                type="primary" if active else "secondary",
+                disabled=quiz["answered"],
+                use_container_width=True,
+            ):
+                quiz["selected"] = option
+                st.rerun()
+    choice = quiz.get("selected")
 
     if not quiz["answered"]:
         if st.button("정답 확인", type="primary", disabled=choice is None):
@@ -243,6 +252,7 @@ def quiz_panel():
         if st.button("다음 문제" if quiz["index"] + 1 < count else "결과 보기", type="primary"):
             quiz["index"] += 1
             quiz["answered"] = False
+            quiz["selected"] = None  # 이전 문제의 선택이 새 문제에 남지 않도록 초기화
             st.rerun()
     if st.button("이 퀴즈 종료"):
         st.session_state.quiz = None
@@ -770,7 +780,7 @@ if (typeof HanziWriter === 'undefined') {
 
 st.markdown("""
 <style>
-/* 한자 탐험대 v1.1.5: 학습 프로그램형 테마. 기능 로직과 분리된 UI 전용 CSS */
+/* 한자 탐험대 v1.1.6: 학습 프로그램형 테마. 기능 로직과 분리된 UI 전용 CSS */
 :root { --study-navy:#253B54; --study-teal:#168A94;
         --study-bg:#F5F9FC; --study-border:#DAE6EE; }
 .stApp {background:linear-gradient(180deg,#EAF5FA 0,#F6F9FC 280px,#FBFCFE 100%);}
@@ -810,17 +820,34 @@ div.stButton > button, div.stDownloadButton > button {min-height:54px;border-rad
 .quiz-symbol {font-size:clamp(155px,23vw,215px);padding:16px 10px;}
 .quiz-prompt {font-size:clamp(25px,3.3vw,34px);font-weight:800;line-height:1.6;
   color:#213953;text-align:center;padding:20px 10px 12px;word-break:keep-all;}
-.st-key-quiz_choice_area [role="radiogroup"] {display:grid;
-  grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
-.st-key-quiz_choice_area [role="radiogroup"] > label {display:flex;
-  background:#FFF;border:2px solid #D7E7EF;border-radius:18px;
-  padding:14px 18px;min-height:87px;cursor:pointer;align-items:center;
-  box-shadow:0 4px 14px rgba(40,73,100,.05);}
-.st-key-quiz_choice_area [role="radiogroup"] > label:has(input:checked) {
-  background:#E6F8F6;border-color:#15969C;}
-.st-key-quiz_choice_area [role="radiogroup"] > label p {
-  font-size:clamp(25px,3.1vw,34px)!important;line-height:1.4!important;
-  font-weight:800;word-break:keep-all;}
+/* 보기 4개는 Streamlit 기본 라디오 대신 크기 확실한 큰 버튼으로 표시 */
+.st-key-quiz_choice_area {display:flex;flex-direction:column;gap:10px;}
+.st-key-quiz_choice_area div.stButton > button {
+  width:100%!important;min-height:103px!important;
+  padding:18px 30px!important;border-radius:20px!important;
+  border:3px solid #C5DFE9!important;background:#FFFFFF!important;
+  color:#1D3852!important;text-align:left!important;
+  justify-content:flex-start!important;white-space:normal!important;
+  font-size:clamp(30px,3.6vw,40px)!important;line-height:1.4!important;
+  font-weight:850!important;box-shadow:0 5px 16px rgba(37,67,90,.06)!important;
+  transition:background-color .15s,border-color .15s;
+}
+.st-key-quiz_choice_area div.stButton > button p,
+.st-key-quiz_choice_area div.stButton > button span,
+.st-key-quiz_choice_area div.stButton > button div {
+  font-size:inherit!important;font-weight:inherit!important;
+  line-height:inherit!important;white-space:normal!important;text-align:left!important;
+}
+.st-key-quiz_choice_area div.stButton > button:hover:not(:disabled) {
+  border-color:#168A94!important;background:#F1FAFC!important;
+}
+.st-key-quiz_choice_area div.stButton > button[data-testid="stBaseButton-primary"] {
+  border-color:#168A94!important;background:#DEF6F2!important;
+  color:#075C65!important;box-shadow:0 0 0 2px #B7E8E3!important;
+}
+.st-key-quiz_choice_area div.stButton > button:disabled {
+  opacity:.9!important;cursor:default!important;
+}
 /* 획순 쓰기: 선택 버튼과 선택한 글자를 크게 표시 */
 .st-key-stroke_unit_buttons div.stButton > button {font-size:clamp(37px,5.1vw,49px);
   min-height:92px;font-family:"Noto Serif CJK KR","Batang",serif;
@@ -840,9 +867,10 @@ div.stButton > button, div.stDownloadButton > button {min-height:54px;border-rad
 @media(max-width:680px) {
   .block-container {padding-top:.7rem;}
   .study-hero {padding:19px 20px;border-radius:19px;margin-bottom:13px;}
-  .st-key-quiz_choice_area [role="radiogroup"] {grid-template-columns:1fr;gap:9px;}
-  .st-key-quiz_choice_area [role="radiogroup"] > label {min-height:72px;padding:12px 15px;}
-  .st-key-quiz_choice_area [role="radiogroup"] > label p {font-size:26px!important;}
+  .st-key-quiz_choice_area div.stButton > button {
+    min-height:91px!important;padding:13px 19px!important;
+    font-size:32px!important;border-radius:16px!important;
+  }
   .st-key-stroke_unit_buttons div.stButton > button {min-height:78px;font-size:37px;}
   .selected-hanja-banner {padding:12px 15px;gap:14px;}
 }
@@ -873,4 +901,4 @@ else:
     page_records()
 
 st.divider()
-st.caption("한자 탐험대 v1.1.5 · 개인 학습용 · 실제 시험 문항을 재현한 공식 모의고사는 아닙니다.")
+st.caption("한자 탐험대 v1.1.6 · 개인 학습용 · 실제 시험 문항을 재현한 공식 모의고사는 아닙니다.")
