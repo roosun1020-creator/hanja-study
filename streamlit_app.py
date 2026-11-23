@@ -1,4 +1,4 @@
-"""한자 탐험대 v1.0 | 한국어문회 8급 복습 + 7급 학습."""
+"""한자 탐험대 v1.1 | 한국어문회 8급 복습 + 7급 학습."""
 
 import json
 import random
@@ -6,9 +6,10 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="한자 탐험대 v1.0",
+    page_title="한자 탐험대 v1.1",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -419,6 +420,110 @@ def page_records():
             st.rerun()
 
 
+def page_writing():
+    """획순 안내 및 직접 쓰기: 소규모 시범 기능."""
+    st.subheader("획순 쓰기")
+    st.write("획순을 본 뒤 손가락, 터치펜 또는 마우스로 직접 써보세요.")
+    # 한국식 획순과 외부 데이터의 차이를 검토하기 전까지 5자만 제공.
+    trial = ["山", "木", "人", "日", "水"]
+    char = st.selectbox(
+        "연습할 한자", trial,
+        format_func=lambda c: f"{c} · {label(INDEX[c])}",
+        key="stroke_char",
+    )
+    st.info(
+        "한국 한자 기준 검증 전 시범 기능입니다. 획순은 중국계 Hanzi Writer 데이터이며 "
+        "한국식 획순과 차이가 있을 수 있습니다. 현재는 5자 기능 테스트입니다."
+    )
+
+    # 선택지에 포함된 단일 한자만 JavaScript에 전달합니다.
+    char_js = json.dumps(char, ensure_ascii=False)
+    html = r'''
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.5/dist/hanzi-writer.min.js"></script>
+<style>
+  body {margin:0; font-family:system-ui,sans-serif; color:#17283e;}
+  .wrap {display:flex;flex-direction:column;align-items:center;gap:12px;}
+  #target {width:280px;height:280px;touch-action:none; background:#fff;
+    border:1px solid #d1d5db;border-radius:12px; overflow:hidden;}
+  #target svg {touch-action:none;}
+  .actions {display:flex;flex-wrap:wrap;justify-content:center;gap:8px;}
+  button {font:inherit;cursor:pointer;border:1px solid #cbd5e1;border-radius:9px;
+    min-height:42px;padding:9px 14px;background:#f8fafc;color:#17283e;}
+  button:disabled {cursor:not-allowed;opacity:.45;}
+  button.primary {background:#1668a5;color:white;border-color:#1668a5;}
+  #status {font-size:14px;text-align:center;min-height:40px;max-width:360px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="target" aria-label="한자 쓰기 영역"></div>
+  <div class="actions">
+    <button id="animate" disabled>① 획순 보기</button>
+    <button id="quiz" class="primary" disabled>② 직접 써보기</button>
+    <button id="retry" disabled>다시 쓰기</button>
+  </div>
+  <div id="status" role="status">획순 데이터를 불러오는 중입니다…</div>
+</div>
+<script>
+  const char = __CHAR_JSON__;
+  const statusEl = document.getElementById('status');
+  const buttons = ['animate','quiz','retry'].map(id => document.getElementById(id));
+  const status = text => {statusEl.textContent = text;};
+  if (typeof HanziWriter === 'undefined') {
+    status('획순 프로그램을 불러오지 못했습니다. 인터넷 연결을 확인하세요.');
+  } else {
+    const writer = HanziWriter.create('target', char, {
+      width: 280, height: 280, padding: 18,
+      showCharacter: false, showOutline: true,
+      strokeColor: '#1d4ed8', outlineColor: '#d1d5db',
+      drawingColor: '#2563eb', highlightColor: '#10b981',
+      strokeAnimationSpeed: 1, delayBetweenStrokes: 400,
+      onLoadCharDataSuccess: () => {
+        buttons.forEach(button => button.disabled = false);
+        status('① 획순을 먼저 보고 ② 직접 써보세요.');
+      },
+      onLoadCharDataError: () => status('이 한자의 획순 데이터를 불러오지 못했습니다.'),
+    });
+    document.getElementById('animate').addEventListener('click', () => {
+      writer.cancelQuiz();
+      status('한 획씩 순서대로 보여드릴게요.');
+      writer.animateCharacter();
+    });
+    function beginQuiz() {
+      status('글자의 회색 윤곽을 따라 첫 획부터 써보세요.');
+      writer.quiz({
+        showHintAfterMisses: 2,
+        leniency: 1.2,
+        onCorrectStroke: data => {
+          status('좋아요! 남은 획: ' + data.strokesRemaining);
+        },
+        onMistake: () => {
+          status('순서나 방향을 다시 확인해 보세요. 두 번 틀리면 힌트가 나와요.');
+        },
+        onComplete: data => {
+          status('완성했어요! ' + (data.totalMistakes === 0
+            ? '한 번에 성공했습니다!' : '틀린 획 ' + data.totalMistakes + '회 · 다시 도전해 보세요.'));
+        },
+      });
+    }
+    document.getElementById('quiz').addEventListener('click', beginQuiz);
+    document.getElementById('retry').addEventListener('click', beginQuiz);
+  }
+</script>
+</body>
+</html>
+'''.replace("__CHAR_JSON__", char_js)
+    components.html(html, height=445, scrolling=False)
+    st.caption(
+        "쓰기 결과는 현재 화면에서만 표시됩니다. "
+        "v1.1에서는 점수·별·학습 진도에 아직 연결되지 않습니다."
+    )
+
 st.markdown("""
 <style>
 .block-container {max-width: 980px; padding-top: 1.25rem;}
@@ -433,13 +538,15 @@ div.stButton > button {min-height: 46px;}
 
 st.title("📚 한자 탐험대")
 st.caption("한국어문회 8급 합격 → 7급 도전 · 신규 100자 + 8급 복습 50자")
-menu = st.radio("메뉴", ["홈", "한자 학습", "퀴즈", "복습", "학습 기록"],
+menu = st.radio("메뉴", ["홈", "한자 학습", "획순 쓰기", "퀴즈", "복습", "학습 기록"],
                 horizontal=True, label_visibility="collapsed")
 st.divider()
 if menu == "홈":
     page_home()
 elif menu == "한자 학습":
     page_learning()
+elif menu == "획순 쓰기":
+    page_writing()
 elif menu == "퀴즈":
     page_quiz()
 elif menu == "복습":
@@ -448,4 +555,4 @@ else:
     page_records()
 
 st.divider()
-st.caption("한자 탐험대 v1.0 · 개인 학습용 · 실제 시험 문항을 재현한 공식 모의고사는 아닙니다.")
+st.caption("한자 탐험대 v1.1 · 개인 학습용 · 실제 시험 문항을 재현한 공식 모의고사는 아닙니다.")
