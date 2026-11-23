@@ -1,16 +1,17 @@
-"""한자 탐험대 v1.2.0 | 드래곤 가디언즈: 진화·기술·한자 배틀."""
+"""한자 탐험대 v1.2.1 | 드래곤 이미지 카드 · 버튼형 스킬 UI."""
 
 import json
 import random
 from datetime import datetime, timedelta
 from html import escape
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="한자 탐험대 v1.2.0",
+    page_title="한자 탐험대 v1.2.1",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -110,6 +111,13 @@ SKILL_TREE = {
         (11,2,"꽃잎폭풍","꽃잎댄스"),(14,2,"대지의뿌리","씨뿌리기"),
         (17,3,"숲의광선","에너지볼"),(20,3,"태양의숨결","솔라빔"),
     ],
+}
+
+# 배틀에서 선택할 기술마다 고유 아이콘을 보여 줍니다.
+SKILL_ICONS = {
+    "fire": ["🔥", "🦷", "🌀", "🐲", "🌪️", "🪽", "☄️", "☀️"],
+    "water": ["🫧", "💦", "🌊", "💠", "🐉", "⚡", "🌊", "🔱"],
+    "forest": ["🌱", "🌰", "🍃", "🌿", "🌸", "🌳", "✨", "☀️"],
 }
 
 
@@ -579,62 +587,107 @@ def page_records():
             st.rerun()
 
 
+def dragon_image(key, stage):
+    """캐릭터 이미지의 절대경로. 파일이 없으면 이모지로 대체합니다."""
+    if key not in DRAGONS or stage not in (1, 2, 3):
+        return None
+    path = Path(__file__).resolve().parent / "assets" / "dragons" / f"{key}_{stage}.webp"
+    return str(path) if path.is_file() else None
+
+
+def dragon_art(key, stage, caption=None):
+    """이미지와 텍스트를 분리하여 Streamlit 재실행에서도 안전하게 표시."""
+    img = dragon_image(key, stage)
+    if img:
+        st.image(img, use_container_width=True)
+    else:
+        st.markdown(f'<div class="dragon-fallback">{DRAGONS[key]["icon"]} 🐉</div>',
+                    unsafe_allow_html=True)
+    if caption:
+        st.markdown(f'<div class="dragon-art-caption">{escape(caption)}</div>',
+                    unsafe_allow_html=True)
+
+
 def page_dragons():
-    """기존 학습·퀴즈와 분리된 드래곤 배틀 화면."""
+    """기존 v1.2.0 배틀 로직을 유지한 카드형 캐릭터 및 스킬 인터페이스."""
     st.subheader("드래곤 가디언즈")
-    st.caption("한자 5개를 풀어 드래곤을 성장시키고 새로운 기술을 배우세요.")
+    st.caption("귀여운 아기 드래곤과 함께 한자를 배우고, 기술을 익히고, 진화해요!")
     progress = st.session_state.progress
     game = progress.setdefault("game", fresh_game())
     units = completed_unit_count(progress)
     update_dragon_ownership(game, units)
+    battle = st.session_state.get("dragon_battle")
 
     if game["starter"] not in DRAGONS:
-        st.markdown("### 함께 모험할 아기 드래곤을 선택하세요")
-        st.info("첫 드래곤을 선택해도 나머지 두 드래곤은 10단원·20단원 보상으로 얻을 수 있어요.")
-        cols = st.columns(3)
+        st.markdown("### 함께 모험할 드래곤을 선택하세요")
+        st.info("첫 번째 드래곤을 선택하세요. 나머지 두 드래곤은 10·20단원 완료 시 얻을 수 있어요.")
+        cols = st.columns(3, gap="medium")
         for idx, (key, dragon) in enumerate(DRAGONS.items()):
             with cols[idx]:
-                st.markdown(
-                    f'<div class="dragon-pick-card">'
-                    f'<div class="dragon-icon">{dragon["icon"]} 🐉</div>'
-                    f'<div class="dragon-big-hanja">{dragon["hanja"][0]}</div>'
-                    f'<strong>{dragon["name"]}</strong>'
-                    f'<small>{dragon["kind"]} · {dragon["forms"][0]}</small>'
-                    '</div>', unsafe_allow_html=True,
-                )
-                if st.button(f"{dragon['name']} 선택", key=f"dragon_starter_{key}",
-                             type="primary", use_container_width=True):
-                    game["starter"] = key
-                    game["active"] = key
-                    update_dragon_ownership(game, units)
-                    st.rerun()
+                with st.container(key=f"dragon_starter_card_{key}"):
+                    dragon_art(key, 1)
+                    st.markdown(f'<div class="dragon-card-symbol">{dragon["hanja"][0]}</div>'
+                                f'<div class="dragon-card-name">{dragon["name"]}</div>'
+                                f'<div class="dragon-card-caption">{dragon["kind"]} · {dragon["forms"][0]}</div>',
+                                unsafe_allow_html=True)
+                    if st.button(f"{dragon['name']} 선택", key=f"dragon_starter_{key}",
+                                 type="primary", use_container_width=True):
+                        game["starter"] = key
+                        game["active"] = key
+                        update_dragon_ownership(game, units)
+                        st.rerun()
         return
 
-    options = game["owned"]
-    chosen = st.selectbox("내 드래곤", options,
-                          index=options.index(game["active"]),
-                          format_func=lambda k: f"{DRAGONS[k]['icon']} {DRAGONS[k]['name']}",
-                          key="dragon_active_selector")
-    game["active"] = chosen
-    dragon = DRAGONS[chosen]
+    # 소유 캐릭터는 카드로 전환. 전투 중에는 변경을 막아 배틀 보상/연출 상태를 보존.
+    st.markdown("### 내 드래곤 선택")
+    if battle is not None:
+        st.caption("배틀 진행 중에는 드래곤을 바꿀 수 없어요. 배틀 종료 후 선택할 수 있습니다.")
+    cols = st.columns(3, gap="medium")
     wins = len(game["won_battles"])
     stage = evolution_stage(units, wins)
-    skills = unlocked_skills(chosen, units, stage)
+    for idx, (key, character) in enumerate(DRAGONS.items()):
+        owned = key in game["owned"]
+        active = key == game["active"]
+        with cols[idx]:
+            with st.container(key=f"dragon_select_card_{key}"):
+                dragon_art(key, stage if owned else 1)
+                st.markdown(f'<div class="dragon-card-symbol">{character["hanja"][stage-1] if owned else character["hanja"][0]}</div>'
+                            f'<div class="dragon-card-name">{character["name"]}</div>',
+                            unsafe_allow_html=True)
+                if owned:
+                    msg = "선택 중 ✓" if active else f"{character['name']} 선택"
+                else:
+                    others = [x for x in DRAGONS if x != game["starter"]]
+                    needed = 10 if key == others[0] else 20
+                    msg = f"🔒 {needed}단원 해금"
+                if st.button(msg, key=f"dragon_switch_{key}",
+                             type="primary" if active and owned else "secondary",
+                             use_container_width=True,
+                             disabled=(not owned) or active or (battle is not None)):
+                    game["active"] = key
+                    st.rerun()
 
-    st.markdown(
-        f'<div class="dragon-hero-card" style="--dragon-accent:{dragon["color"]}">'
-        f'<div class="dragon-avatar">{dragon["icon"]} 🐉</div>'
-        f'<div><div class="dragon-subtitle">{dragon["kind"]} 드래곤 · {stage}단계 진화</div>'
-        f'<div class="dragon-hero-name">{dragon["name"]} · {dragon["forms"][stage-1]}</div>'
-        f'<div class="dragon-hero-hanja">{dragon["hanja"][stage-1]}</div>'
-        '</div></div>', unsafe_allow_html=True,
-    )
-    a,b,c,d=st.columns(4)
+    chosen = game["active"]
+    dragon = DRAGONS[chosen]
+    skills = unlocked_skills(chosen, units, stage)
+    with st.container(key="dragon_feature_hero"):
+        colpic, colinfo = st.columns([1, 1.7], gap="medium", vertical_alignment="center")
+        with colpic:
+            dragon_art(chosen, stage)
+        with colinfo:
+            st.caption(f"{dragon['kind']} 속성 · {stage}단계 진화")
+            st.markdown(f'<div class="dragon-hero-name">{escape(dragon["name"])} · '
+                        f'{escape(dragon["forms"][stage-1])}</div>'
+                        f'<div class="dragon-hero-hanja" style="color:{dragon["color"]}">'
+                        f'{dragon["hanja"][stage-1]}</div>', unsafe_allow_html=True)
+            st.caption("한자의 힘으로 성장하는 나의 드래곤")
+
+    a, b, c, d = st.columns(4)
     a.metric("완료한 신규 단원", f"{units}/20")
     b.metric("해금 기술", f"{len(skills)}/8")
     c.metric("드래곤 경험치", f"{game['xp']:,} XP")
     d.metric("승리한 배틀", f"{wins}개")
-    st.progress(units/20)
+    st.progress(units / 20)
     st.caption(f"드래곤 레벨 {1 + game['xp'] // 60} · 다음 레벨까지 {60 - game['xp'] % 60} XP")
     if stage == 1:
         st.caption("1차 진화: 신규 단원 5개 학습 완료 + 서로 다른 배틀 1회 승리")
@@ -648,35 +701,34 @@ def page_dragons():
             available = units >= requirement and stage >= min_stage
             state = "습득 완료" if available else f"잠김 · {requirement}단원, 진화 {min_stage}단계"
             st.write(f"{'✅' if available else '🔒'} **{move}** — {state}")
-        st.caption("기술들은 파이리·꼬부기·이상해씨의 기술에서 영감을 받아 새롭게 명명했습니다.")
+        st.caption("기술은 속성별로 총 8개입니다. 해금 조건을 달성하면 배틀에서 선택할 수 있어요.")
 
-    battle = st.session_state.get("dragon_battle")
     if battle is None:
         st.divider()
         st.markdown("### 한자 배틀 시작")
-        scopes = ["8급 복습"] + [f"신규 {n}단원" for n in range(1,21)]
+        scopes = ["8급 복습"] + [f"신규 {n}단원" for n in range(1, 21)]
         if len(progress.get("learned", [])) >= 5:
-            scopes.insert(1,"학습 완료 한자")
+            scopes.insert(1, "학습 완료 한자")
         scope = st.selectbox("배틀 학습 범위", scopes, key="dragon_battle_scope")
         pool = battle_scope_pool(progress, scope)
         st.caption("5문제 중 4문제 이상 정답이면 승리! 처음 승리한 범위마다 경험치 30점을 받습니다.")
         if st.button("드래곤 배틀 시작", type="primary", use_container_width=True,
-                     disabled=len(pool)<5):
-            st.session_state.dragon_battle_serial = st.session_state.get("dragon_battle_serial",0)+1
-            st.session_state.dragon_battle=fresh_battle(
+                     disabled=len(pool) < 5):
+            st.session_state.dragon_battle_serial = st.session_state.get("dragon_battle_serial", 0) + 1
+            st.session_state.dragon_battle = fresh_battle(
                 pool, scope, st.session_state.dragon_battle_serial)
             st.rerun()
         return
 
     st.divider()
     st.markdown(f"### {battle['scope']} · 한자 배틀")
-    n=len(battle["questions"])
-    index=battle["index"]
+    n = len(battle["questions"])
+    index = battle["index"]
     if index >= n:
-        won=battle["correct"]>=4
+        won = battle["correct"] >= 4
         if not battle["rewarded"]:
             battle["new_reward"] = award_first_win(game, battle["scope"]) if won else False
-            battle["rewarded"]=True
+            battle["rewarded"] = True
         if won:
             st.success(f"배틀 승리! {n}문제 중 {battle['correct']}문제 정답")
         else:
@@ -686,61 +738,84 @@ def page_dragons():
         elif won:
             st.caption("이 범위의 첫 승리 보상은 이미 받았어요. 재도전은 언제든 가능합니다.")
         if st.button("다른 배틀 선택", type="primary", use_container_width=True):
-            st.session_state.dragon_battle=None
+            st.session_state.dragon_battle = None
             st.rerun()
         return
 
-    st.progress(index/n)
+    st.progress(index / n)
     st.caption(f"문제 {index+1} / {n} · 현재 정답 {battle['correct']}개")
-    q=battle["questions"][index]
-    col1,col2=st.columns([1,1])
+    q = battle["questions"][index]
+    col1, col2 = st.columns([1, 1], gap="medium")
     with col1:
-        st.markdown(f'<div class="battle-fighter">{dragon["icon"]} 🐉<br>'
-                    f'<span>{dragon["name"]}</span></div>', unsafe_allow_html=True)
+        with st.container(key="dragon_battle_fighter"):
+            dragon_art(chosen, stage)
+            st.markdown(f'<div class="dragon-art-caption">{escape(dragon["name"])} · 내 드래곤</div>',
+                        unsafe_allow_html=True)
     with col2:
-        enemy_hp=max(0,100-25*battle["correct"])
-        st.markdown('<div class="battle-fighter battle-enemy">👾<br>'
-                    f'<span>상대 몬스터 · HP {enemy_hp}/100</span></div>',
-                    unsafe_allow_html=True)
-    st.markdown(f'<div class="battle-char">{escape(q["char"])}</div>',unsafe_allow_html=True)
-    st.markdown(f'<div class="battle-prompt">{escape(q["title"])}</div>',unsafe_allow_html=True)
+        enemy_hp = max(0, 100 - 25 * battle["correct"])
+        with st.container(key="dragon_battle_enemy"):
+            st.markdown('<div class="dragon-enemy-icon">👾</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="dragon-art-caption">상대 몬스터 · HP {enemy_hp}/100</div>',
+                        unsafe_allow_html=True)
+            st.progress(enemy_hp / 100)
+    st.markdown(f'<div class="battle-char">{escape(q["char"])}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="battle-prompt">{escape(q["title"])}</div>', unsafe_allow_html=True)
 
     if not battle["answered"]:
-        move = st.selectbox("사용할 기술", [x[2] for x in skills],
-                            index=len(skills)-1,
-                            key=f"dragon_move_{battle['serial']}_{index}")
+        # 최신 습득 기술을 처음 선택하되, 버튼으로 바꾼 뒤에도 선택 상태가 유지됩니다.
+        skill_names = [entry[2] for entry in skills]
+        if battle.get("move") not in skill_names:
+            battle["move"] = skill_names[-1]
+        st.markdown("#### 사용할 기술 선택")
+        with st.container(key="dragon_skill_grid"):
+            for i in range(0, len(skill_names), 2):
+                cs = st.columns(2, gap="small")
+                for j, name in enumerate(skill_names[i:i+2]):
+                    with cs[j]:
+                        selected_move = battle["move"] == name
+                        icon = SKILL_ICONS[chosen][i+j]
+                        if st.button(f"{icon}  {name}" + ("  ✓" if selected_move else ""),
+                                     key=f"dragon_skill_{battle['serial']}_{index}_{i+j}",
+                                     type="primary" if selected_move else "secondary",
+                                     use_container_width=True):
+                            battle["move"] = name
+                            st.rerun()
+        st.markdown("#### 정답 선택")
         with st.container(key="dragon_answers"):
             for i, option in enumerate(q["choices"]):
-                if st.button(f"{i+1}.  {option}", key=f"dragon_answer_{battle['serial']}_{index}_{i}",
-                             type="primary" if battle["selected"]==option else "secondary",
+                if st.button(f"{i+1}.  {option}",
+                             key=f"dragon_answer_{battle['serial']}_{index}_{i}",
+                             type="primary" if battle["selected"] == option else "secondary",
                              use_container_width=True):
-                    battle["selected"]=option
+                    battle["selected"] = option
                     st.rerun()
-        if st.button(f"{move} 사용하기!", type="primary",
+        if st.button(f"{battle['move']} 사용하기!", type="primary",
                      disabled=battle["selected"] is None, use_container_width=True):
-            correct=battle["selected"]==q["answer"]
-            register_answer(q["char"],correct)
-            battle["answered"]=True
-            battle["last_correct"]=correct
-            battle["last_skill"]=move
+            correct = battle["selected"] == q["answer"]
+            register_answer(q["char"], correct)
+            battle["answered"] = True
+            battle["last_correct"] = correct
+            battle["last_skill"] = battle["move"]
             if correct:
-                battle["correct"]+=1
+                battle["correct"] += 1
             st.rerun()
     else:
         if battle["last_correct"]:
-            st.success(f"{battle['last_skill']} 성공! 정답입니다. 상대 몬스터에게 피해를 주었어요!")
+            st.markdown(f'<div class="dragon-attack-result dragon-attack-{chosen}">'
+                        f'✨ {escape(battle["last_skill"])} 성공! 상대 몬스터에게 피해를 주었어요!'
+                        '</div>', unsafe_allow_html=True)
         else:
             st.error(f"이번엔 빗나갔어요. 정답은 '{q['answer']}'입니다.")
-        if st.button("다음 문제" if index+1<n else "배틀 결과 보기",
+        if st.button("다음 문제" if index+1 < n else "배틀 결과 보기",
                      type="primary", use_container_width=True):
-            battle["index"]+=1
-            battle["selected"]=None
-            battle["answered"]=False
+            battle["index"] += 1
+            battle["selected"] = None
+            battle["answered"] = False
             st.rerun()
     if st.button("현재 배틀 종료", type="secondary"):
-        st.session_state.dragon_battle=None
+        st.session_state.dragon_battle = None
         st.rerun()
-    st.caption("캐릭터는 임시 아이콘입니다. 원본 드래곤 그림과 기술 애니메이션은 이후 버전에 적용합니다.")
+    st.caption("캐릭터는 직접 제작한 드래곤 이미지입니다. 한국식 획순 검증은 별도 진행 중입니다.")
 
 
 def page_writing():
@@ -1215,6 +1290,72 @@ div.stButton > button, div.stDownloadButton > button {min-height:54px;border-rad
   .dragon-pick-card small{font-size:11px;}
   .st-key-dragon_answers div.stButton>button{min-height:85px!important;font-size:28px!important;}
 }
+
+/* v1.2.1 드래곤 이미지 카드: 기존 퀴즈·획순 UI와 분리 */
+[class*="st-key-dragon_starter_card_"],
+[class*="st-key-dragon_select_card_"] {
+  background: #fff;
+  border: 2px solid #D7E6EF;
+  border-radius: 22px;
+  padding: 14px 10px 16px;
+  text-align: center;
+  box-shadow: 0 5px 16px rgba(36, 79, 106, .07);
+}
+[class*="st-key-dragon_select_card_"]:has(button[kind="primary"]) {
+  border-color:#27A9AD;
+  box-shadow: 0 6px 20px rgba(22, 122, 135, .16);
+}
+[class*="st-key-dragon_starter_card_"] img,
+[class*="st-key-dragon_select_card_"] img{
+  max-height: 205px;
+  object-fit: contain;
+}
+.dragon-card-symbol {font-size:clamp(33px,4vw,50px);font-weight:900;color:#216C83;}
+.dragon-card-name{font-size:clamp(20px,2.5vw,28px);font-weight:900;color:#243B51;}
+.dragon-card-caption{font-size:13px;font-weight:700;color:#627D91;margin-bottom:8px;}
+.dragon-fallback{text-align:center;font-size:82px;min-height:170px;}
+.dragon-art-caption {font-size:16px;font-weight:850;text-align:center;color:#34506A;margin-top:3px;}
+.st-key-dragon_feature_hero {
+  border:2px solid #D4E6EC;border-radius:24px;background:linear-gradient(135deg,#FFFFFF 0%,#EAF8F8 100%);
+  padding:15px 24px;margin:18px 0 16px;
+}
+.st-key-dragon_feature_hero img{max-height:255px;object-fit:contain;}
+.st-key-dragon_battle_fighter,.st-key-dragon_battle_enemy{
+  min-height:250px;border:2px solid #D4E6EC;border-radius:20px;
+  padding:10px 16px;background:#fff;
+}
+.st-key-dragon_battle_fighter img{max-height:210px;object-fit:contain;}
+.st-key-dragon_battle_enemy{background:linear-gradient(135deg,#FFF8F0,#F5F3FF);}
+.dragon-enemy-icon{font-size:122px;text-align:center;line-height:1.75;}
+.st-key-dragon_skill_grid div.stButton > button{
+  min-height:71px!important;border-radius:17px!important;
+  padding:10px 14px!important;font-size:clamp(18px,2.25vw,25px)!important;
+  font-weight:850!important;border:2px solid #B5D8E4!important;
+}
+.st-key-dragon_skill_grid div.stButton > button[kind="primary"]{
+  border-color:#147A8C!important; box-shadow:0 0 0 3px rgba(28,131,155,.15);
+}
+.st-key-dragon_skill_grid div.stButton > button p{font-size:inherit!important;font-weight:850!important;}
+.dragon-attack-result{border-radius:16px;padding:20px 14px;font-size:clamp(20px,3vw,28px);
+ font-weight:900;text-align:center;animation:dragonAttackPulse .8s ease-in-out 1;
+ border:2px solid #C2DCEC;background:#ECF9FF;color:#205580;}
+.dragon-attack-fire{background:#FFF2E9;border-color:#F5B684;color:#A34D1B;}
+.dragon-attack-water{background:#EAF6FF;border-color:#99CEF8;color:#2069A6;}
+.dragon-attack-forest{background:#EDF9EF;border-color:#9CD5B3;color:#237749;}
+@keyframes dragonAttackPulse{0%{transform:scale(.96);opacity:.6}65%{transform:scale(1.015);opacity:1}100%{transform:scale(1)}}
+@media(max-width:680px){
+ [class*="st-key-dragon_starter_card_"], [class*="st-key-dragon_select_card_"]{padding:8px 4px;}
+ [class*="st-key-dragon_starter_card_"] img,[class*="st-key-dragon_select_card_"] img{max-height:120px;}
+ .dragon-card-symbol{font-size:29px;}.dragon-card-name{font-size:18px;}
+ .dragon-card-caption{font-size:11px;}
+ .st-key-dragon_feature_hero{padding:11px 14px;}
+ .st-key-dragon_feature_hero img{max-height:160px;}
+ .st-key-dragon_battle_fighter,.st-key-dragon_battle_enemy{min-height:180px;padding:6px;}
+ .st-key-dragon_battle_fighter img{max-height:150px;}
+ .dragon-enemy-icon{font-size:83px;}
+ .st-key-dragon_skill_grid div.stButton > button{min-height:79px!important;font-size:22px!important;}
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -1244,4 +1385,4 @@ else:
     page_records()
 
 st.divider()
-st.caption("한자 탐험대 v1.2.0 · 개인 학습용 · 실제 시험 문항을 재현한 공식 모의고사는 아닙니다.")
+st.caption("한자 탐험대 v1.2.1 · 개인 학습용 · 실제 시험 문항을 재현한 공식 모의고사는 아닙니다.")
