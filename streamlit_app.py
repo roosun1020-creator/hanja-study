@@ -1,4 +1,4 @@
-"""한자 탐험대 v1.1.2 | 한국어문회 8급 복습 + 7급 학습."""
+"""한자 탐험대 v1.1.3 | 한국어문회 8급 복습 + 7급 학습."""
 
 import json
 import random
@@ -9,7 +9,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="한자 탐험대 v1.1.2",
+    page_title="한자 탐험대 v1.1.3",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -645,7 +645,8 @@ if (typeof HanziWriter === 'undefined') {
     showCharacter:false,showOutline:true,
     strokeColor:'#1d4ed8',outlineColor:'#d1d5db',
     drawingColor:'#2563eb',highlightColor:'#10b981',
-    strokeAnimationSpeed:1,delayBetweenStrokes:250,
+    strokeAnimationSpeed:0.5,delayBetweenStrokes:250, // 획 재생 속도를 기존의 절반으로
+    drawingWidth:40, // 직접 쓰기 펜 굵기를 기본값(4)의 10배로
     onLoadCharDataSuccess: data => {
       strokeCount=data.strokes.length;
       counter.textContent='총 '+strokeCount+'획';
@@ -712,4 +713,4 @@ else:
     page_records()
 
 st.divider()
-st.caption("한자 탐험대 v1.1.2 · 개인 학습용 · 실제 시험 문항을 재현한 공식 모의고사는 아닙니다.")
+st.caption("한자 탐험대 v1.1.3 · 개인 학습용 · 실제 시험 문항을 재현한 공식 모의고사는 아닙니다.")
