@@ -1,75 +1,83 @@
-# 한자 탐험대 v1.2.2 — 어린이용 판타지 UI 전면 개편
+# 한자 탐험대 v1.2.3 — 드래곤 가디언즈 전투 효과 및 글자 확대
 
-## 변경 기준
+## 구성
+- `streamlit_app.py` — 기존 기능을 포함하는 **전체 프로그램**
+- `requirements.txt` — 기존과 동일 (`streamlit>=1.40,<2`)
+- `assets/dragons/*.webp` — 기존 드래곤 9개 이미지 유지
+- `assets/effects/*.webp` — 불/물/숲 전용 기술 이미지 15개 신규
+- `assets/monsters/*.webp` — 일반 6, 중간 보스 2, 최종 보스 1 (총 9개) 신규
+- `QA_REPORT.md` — 검사 범위 및 한계
 
-정상 동작하던 v1.2.1 코드를 **기준선으로 유지**했습니다. `load_cards`, `register_answer`, `make_question`, `start_quiz`, `quiz_panel`, `restore_progress`, 배틀 문제 생성, 경험치 중복 방지, 진화, 스킬 해금 로직은 변경하지 않았습니다. 획순 애니메이션·자동 판정 관련 HTML/JavaScript도 변경하지 않았습니다.
+## 드래곤 기술 개편
+총 **5개 기술/드래곤**. 해금 완료 단원 수는 `0/5/10/15/20`이고, 진화 단계는 `1/2/2/3/3` 이상이어야 합니다.
 
-### 화면별 변경점
+| 완료 단원 | 화루 | 수루 | 그루 |
+|---|---|---|---|
+| 시작 | 불꽃탄 | 물방울탄 | 새싹탄 |
+| 5 | 화염꼬리 | 물대포 | 덩굴채찍 |
+| 10 | 불꽃회오리 | 물의파동 | 잎날베기 |
+| 15 | 화염방사 | 강물베기 | 숲의뿌리 |
+| 20 | 대화염 | 대해의파도 | 고대숲의힘 |
 
-- **전체 메뉴**: 7개 상단 라디오 메뉴 → 4+3 배열의 큰 모험 버튼 (현재 페이지 표시)
-- **홈**: Streamlit 업무형 metric → 별·메달·연속 공부 카드, 추천 단원 직접 이동
-- **한자 학습**: 라디오·드롭다운 → 급수 선택 카드, 5개 단원씩 표시하는 큰 타일
-- **한자 퀴즈**: 출제범위 드롭다운 → 6개 모험 카드; 기존 큰 정답 버튼 유지
-- **복습**: 복습 개수·해당 한자를 카드와 큰 액션 버튼으로 표시
-- **획순 쓰기**: 방식/급수/단원 드롭다운 제거, 5개 단원 페이지·큰 한자 타일, 전체 한자와 배운 한자는 검색 + 12개씩 페이지로 선택
-- **드래곤**: 기존 이미지 9개, 기술 버튼, 문제 풀이·진화 유지, 전체 파스텔 판타지 카드 스킨 통합; 배틀 범위도 카드/단원 타일로 전환
-- **학습기록**: 어린이 화면은 한자 도감(50자/급수)으로 표시, 상세 데이터 표·JSON 백업 및 복원은 학부모 메뉴 안으로 이동
-- **기록 초기화**: 체크박스 제거. ‘초기화 메뉴 열기’ → 별도의 ‘정말 모두 삭제’로 2단계 확인
+**진화 조건은 v1.2.2와 동일**: 5단원+서로 다른 배틀 승리 1개 → 2단계, 15단원+서로 다른 배틀 승리 3개 → 3단계. 학습한 단원 수와 진화 단계를 동시에 만족해야 새 기술을 사용할 수 있습니다.
 
-## 버전 유지 / 주의
+## 몬스터
+- 1~3단원: 보라 말랑이
+- 4~6단원: 새싹 도깨비
+- 7~9단원: 버섯 요정
+- 10단원: 바위 골렘 **중간 보스**
+- 11~12단원: 수정 박쥐
+- 13~14단원: 번개 여우
+- 15단원: 고대 나무 정령 **중간 보스**
+- 16~17단원: 불꽃 도깨비
+- 18단원: 번개 여우, 19단원: 불꽃 도깨비
+- 20단원: 그림자 용왕 **최종 보스**
 
-- 총 한자 150자 (8급 50, 7급Ⅱ 50, 7급 50) 유지
-- 드래곤 진화: 화루 火→炎→焱, 수루 水→江→海, 그루 木→林→森
-- 기술은 각 드래곤 8개, 단원/진화 기준 그대로
-- **학습 기록은 브라우저 세션에 보관**됩니다. 앱 새로고침·재배포·서버 재시작 시 데이터가 사라질 수 있으므로 **학습기록 → 학부모용 상세기록·백업 → JSON 다운로드**를 먼저 진행하세요.
-- 기존 JSON 백업은 `restore_progress` 변경 없이 복원 지원합니다.
-- 획순 쓰기는 HanziWriter 중국식 획순 데이터 기반이며 한국식 획순 검증이 완료된 것은 아닙니다.
-- 무료 Streamlit Cloud 실제 모바일 렌더링/터치 테스트는 아직 진행하지 않았습니다. 디자인 미리보기 PNG는 **임의의 예시 진도 수치로 그린 정적 시안**입니다.
+기본 8급 복습은 보라 말랑이, 배운 한자 복합 전투는 완료 단원 수에 따른 몬스터가 나옵니다. 현재 버전에서 보스는 **외형·이름·등장 위치를 다르게 하는 보스**이며, 문제 개수·정답 점수·HP를 더 어렵게 변경하지 않았습니다. 어린이의 학습 난이도 급상승을 막기 위해서입니다.
 
-## Codespaces 업그레이드 (추천)
+## 화면 크기 변경
+- 배우기·쓰기에서 공유하는 `1~5`, `6~10` 범위 버튼 글자를 키움
+- 개별 단원 버튼 글자 확대
+- 쓰기 `한자를 하나 골라 보세요`의 5개 글자 타일/전체 한자 도감의 한자 버튼 확대
+- PC·모바일 크기를 별도 설정, 작은 화면 줄바꿈에 대응
 
-현재 저장소 최상위 `/workspaces/hanja-study`에 새 ZIP을 끌어 업로드한 뒤:
+## GitHub Codespaces 설치 (기존 v1.2.2에서 업그레이드)
+1. `hanja-study-v1.2.3.zip`을 Codespaces 탐색기로 업로드하세요. 이전처럼 `.devcontainer` 폴더에 들어가도 괜찮습니다.
+2. **앱 실행 중인 터미널을 건드리지 말고**, 별도 새 터미널을 엽니다.
+3. 현재 파일을 먼저 백업합니다.
 
 ```bash
-pwd
-# /workspaces/hanja-study 인지 확인
-cp streamlit_app.py /tmp/streamlit_app_before_v1.2.2.py
-unzip -o hanja-study-v1.2.2.zip
+cd /workspaces/hanja-study
+cp streamlit_app.py /tmp/hanja_v1.2.2_backup.py
+find /workspaces/hanja-study -name 'hanja-study-v1.2.3.zip'
+```
+
+4. 찾은 경로에 맞게 아래 둘 중 하나를 실행합니다.
+
+```bash
+# ZIP이 .devcontainer 폴더에 있을 때
+unzip -o .devcontainer/hanja-study-v1.2.3.zip -d /workspaces/hanja-study
+
+# ZIP이 hanja-study 최상위 폴더에 있을 때
+unzip -o hanja-study-v1.2.3.zip -d /workspaces/hanja-study
+```
+
+5. 압축 해제 이후 확인합니다.
+
+```bash
 python -m py_compile streamlit_app.py
-ls assets/dragons/*.webp
+ls assets/effects/ | wc -l      # 15
+ls assets/monsters/ | wc -l     # 9
+ls assets/dragons/ | wc -l      # 9
 ```
 
-모든 이미지가 보이는지 확인하세요. 다음으로 Git의 상태를 확인합니다.
+6. Source Control에서 **코드와 이미지 자산만** 커밋하세요. `.zip`과 백업파일은 스테이징하지 않습니다.
 
 ```bash
+git add streamlit_app.py assets/dragons assets/effects assets/monsters
 git status -sb
-```
-
-**중요:** 이전에 업로드한 `hanja-study-v1.2.1.zip`과 `streamlit_app_backup_v1.2.0.py`가 초록색 `A`로 **스테이징되어 있었을 수 있습니다.** 이 파일은 배포에 필요하지 않습니다. 스테이징되어 있다면:
-
-```bash
-git restore --staged hanja-study-v1.2.1.zip streamlit_app_backup_v1.2.0.py
-```
-
-새 ZIP과 임시 백업도 GitHub에 올릴 필요가 없습니다. 변경된 코드와 이미지만 커밋:
-
-```bash
-git add streamlit_app.py assets/dragons/
-git diff --cached --name-only
-# 출력에 streamlit_app.py와 assets/dragons/...만 포함됐는지 확인
-git commit -m "Hanja Study v1.2.2 kids UI"
+git commit -m 'Hanja Study v1.2.3'
 git push origin main
 ```
 
-동기화 후 Streamlit Cloud 웹앱의 **홈 / 배우기 / 퀴즈 / 복습 / 쓰기 / 드래곤 / 기록** 각 화면을 확인하세요.
-
-**이미 운영 중인 코드를 Codespaces에서 별도로 수정했다면**, 이 ZIP을 바로 덮어쓰기 전에 원본과 비교해 병합하세요.
-
-## 포함 파일
-
-- `streamlit_app.py`: 전체 Python 앱 코드
-- `requirements.txt`: Streamlit 버전 범위 (v1.2.1과 동일)
-- `assets/dragons/*.webp`: 드래곤 3종 × 진화 3단계, 총 9개
-- `design-preview.html`: 실제 Streamlit과 별개인 정적 UI 시안
-- `design-desktop.png`, `design-mobile.png`: 예시 데이터를 이용한 디자인 확인용 이미지
-- `QA_REPORT.md`: 정적/로직 테스트 및 실행 환경 한계
+**이미 과거 ZIP/백업 파일이 스테이징돼 있다면 `git status`에서 확인하고 커밋하기 전에 제외해야 합니다.** 기존 학습기록을 지우거나 초기화하지 마세요. 웹앱 서버 내 세션 유지 방식은 기존과 같으므로, 기록 보존이 중요하다면 학부모 메뉴에서 JSON 파일을 내보내 두는 것이 안전합니다.
