@@ -1,4 +1,4 @@
-"""한자 탐험대 v1.2.3 | 전용 기술 이펙트 15종 · 몬스터 9종 · 큰 글자 UI."""
+"""한자 탐험대 v1.2.3.3 | 모바일 중앙 배틀 애니메이션 및 정답 화면 개선."""
 
 import json
 import random
@@ -12,7 +12,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="한자 탐험대 v1.2.3",
+    page_title="한자 탐험대 v1.2.3.3",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -878,6 +878,165 @@ def dragon_art(key, stage, caption=None):
                     unsafe_allow_html=True)
 
 
+
+
+def _battle_image_data(path):
+    """Battle assets are local WebP files; inline URLs work in iframe/mobile browsers."""
+    if not path or not Path(path).is_file():
+        return ""
+    return "data:image/webp;base64," + base64.b64encode(Path(path).read_bytes()).decode("ascii")
+
+
+def battle_attack_html(dragon_key, dragon_stage, enemy_id, move, is_correct, hp_after):
+    """Self-contained HTML/CSS animation. No dependency on parent Streamlit DOM/scroll."""
+    drag = DRAGONS[dragon_key]
+    enemy = MONSTERS[enemy_id]
+    player_src = _battle_image_data(dragon_image(dragon_key, dragon_stage))
+    enemy_src = _battle_image_data(monster_image(enemy_id))
+    spell_src = _battle_image_data(effect_image(dragon_key, move)) if is_correct else ""
+    player_html = (f'<img src="{player_src}" alt="{escape(drag["name"])} 드래곤"/>'
+                   if player_src else f'<span class="fallback">{drag["icon"]}🐉</span>')
+    enemy_html = (f'<img src="{enemy_src}" alt="{escape(enemy["name"])} 몬스터"/>'
+                  if enemy_src else f'<span class="fallback">{enemy["emoji"]}</span>')
+    spell_html = (f'<img class="projectile" src="{spell_src}" alt="{escape(move)} 공격 이미지"/>'
+                  if spell_src else '')
+    before_hp = min(100, hp_after + (25 if is_correct else 0))
+    summary = (f'✨ 공격 성공! {escape(enemy["name"])}에게 25 피해!'
+               if is_correct else f'📖 아쉬워요! 다시 배우면 더 강해져요.')
+    scene_type = 'hit' if is_correct else 'miss'
+    template = r"""<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+*{box-sizing:border-box}html,body{padding:0;margin:0;background:transparent;
+ font-family:system-ui,-apple-system,'Malgun Gothic',sans-serif;overflow:hidden;}
+.scene{position:relative;width:100%;height:272px;border-radius:18px;
+ background:linear-gradient(180deg,#F0F9FF,#F6F3FF 65%,#E8F7E8);
+ border:2px solid #E2D5F3;overflow:hidden;isolation:isolate;}
+.scene:before{content:"";position:absolute;left:0;right:0;bottom:32px;height:30px;
+ background:linear-gradient(#C3E7B5,#D7E8AA);border-radius:50%;opacity:.75;}
+.banner{position:absolute;z-index:4;left:3%;right:3%;top:7px;text-align:center;
+ font-size:clamp(16px,4.3vw,22px);font-weight:950;color:#593F94;
+ text-shadow:0 1px #fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.unit{position:absolute;top:40px;width:43%;height:165px;z-index:2;display:flex;
+ flex-direction:column;align-items:center;justify-content:flex-end;gap:3px;}
+.player{left:2%}.target{right:2%}
+.unit img{max-width:100%;width:auto;height:auto;max-height:125px;object-fit:contain;
+ filter:drop-shadow(0 5px 4px rgba(77,60,95,.16));}
+.fallback{font-size:76px;line-height:1.1}
+.name{font-size:clamp(12px,3.25vw,17px);font-weight:850;white-space:nowrap;color:#3C376B;
+ background:#ffffffd9;border-radius:11px;padding:3px 8px;max-width:100%;overflow:hidden;text-overflow:ellipsis;}
+.hp{font-size:12px;color:#455B72;background:#ffffffd6;border-radius:8px;padding:1px 7px;}
+.healthbar{width:79%;height:6px;border-radius:99px;background:#EEE8E9;overflow:hidden;margin-top:2px}
+.healthfill{height:100%;background:#EC776B;width:var(--before)}
+.projectile{position:absolute;top:97px;left:17%;width:clamp(68px,25%,126px);
+ max-height:113px;height:auto;object-fit:contain;opacity:0;z-index:5;
+ filter:drop-shadow(0 0 10px rgba(255,186,90,.55));pointer-events:none;}
+.impact{position:absolute;left:78%;top:109px;transform:translate(-50%,-50%) scale(.2);
+ border:5px solid rgba(255,244,153,.9);border-radius:50%;width:64px;height:64px;
+ opacity:0;z-index:6;pointer-events:none;}
+.result{position:absolute;z-index:7;bottom:7px;left:3%;right:3%;text-align:center;
+ border-radius:13px;background:#FFFBF1;border:1px solid #EDDAAB;padding:8px 5px;
+ color:#7A4B1D;font-size:clamp(12px,3.2vw,16px);font-weight:900;opacity:1;}
+.scene.miss .result{background:#FFF5FB;color:#7C4B76;border-color:#EDD4E9;}
+.scene.play.hit .projectile{animation:spellMove 3.55s cubic-bezier(.35,.05,.5,.97) .35s both;}
+.scene.play.hit .target img{animation:hitShake .67s ease-in-out 3.02s both;}
+.scene.play.hit .impact{animation:impactSpark .7s ease-out 3.00s both;}
+.scene.play.hit .healthfill{animation:healthReduce .6s ease-in-out 3.08s both;}
+.scene.play .result{opacity:0;animation:showResult .45s ease-out 3.52s forwards;}
+.scene.play.miss .result{animation-delay:.45s;}
+@keyframes spellMove{
+  0%{left:17%;opacity:0;transform:translate(-50%,-50%) scale(.42) rotate(-12deg);}
+  12%{opacity:1;}
+  48%{left:50%;opacity:1;transform:translate(-50%,-50%) scale(.88) rotate(9deg);}
+  73%{left:77%;opacity:1;transform:translate(-50%,-50%) scale(1.10) rotate(-5deg);}
+  83%{left:79%;opacity:1;transform:translate(-50%,-50%) scale(1.24);}
+  100%{left:79%;opacity:0;transform:translate(-50%,-50%) scale(1.36);}
+}
+@keyframes hitShake{0%,100%{transform:translateX(0);filter:none;}
+ 25%{transform:translateX(-9px);filter:brightness(1.6);}60%{transform:translateX(8px);}}
+@keyframes impactSpark{0%{opacity:0;transform:translate(-50%,-50%) scale(.3)}
+ 40%{opacity:1;transform:translate(-50%,-50%) scale(1.2)}
+ 100%{opacity:0;transform:translate(-50%,-50%) scale(1.8)}}
+@keyframes healthReduce{from{width:var(--before)}to{width:var(--after)}}
+@keyframes showResult{from{opacity:0;transform:translateY(8px)}
+ to{opacity:1;transform:translateY(0)}}
+@media(max-width:400px){.scene{height:250px}.unit{top:40px;height:146px}
+ .unit img{max-height:105px}.projectile{top:90px;width:78px}
+ .impact{top:96px}.fallback{font-size:53px}.result{font-size:13px}}
+@media(prefers-reduced-motion:reduce){.scene.play *{animation:none!important}
+ .scene.play.hit .projectile{opacity:1;left:78%;transform:translate(-50%,-50%) scale(1)}
+ .scene.play .healthfill{width:var(--after)}.scene.play .result{opacity:1}}
+</style></head><body>
+<div id="battleScene" class="scene __SCENETYPE__" aria-label="드래곤 전투 공격 장면">
+ <div class="banner">__MOVE__!</div>
+ <div class="unit player">__PLAYER_HTML__<div class="name">__DRAGON_NAME__</div></div>
+ <div class="unit target">__ENEMY_HTML__<div class="name">__ENEMY_NAME__</div>
+  <div class="hp">HP __AFTER__/100</div><div class="healthbar"><div class="healthfill" style="--before:__BEFORE__%;--after:__AFTER__%"></div></div>
+ </div>
+ __SPELL_HTML__
+ <div class="impact"></div>
+ <div class="result">__SUMMARY__</div>
+</div>
+<script>
+(function(){
+ const stage=document.getElementById('battleScene');
+ const imgs=Array.from(stage.querySelectorAll('img'));
+ let done=false;
+ function play(){if(done)return;done=true;requestAnimationFrame(()=>stage.classList.add('play'));}
+ const pending=imgs.map(img=>(typeof img.decode==='function'
+   ? img.decode().catch(()=>{}) : Promise.resolve()));
+ Promise.all(pending).then(()=>setTimeout(play,200));
+ setTimeout(play,1200); // mobile image decoding fallback
+})();
+</script></body></html>"""
+    values = {
+        '__SCENETYPE__': scene_type, '__MOVE__': escape(move),
+        '__PLAYER_HTML__': player_html, '__ENEMY_HTML__': enemy_html,
+        '__DRAGON_NAME__': escape(drag['name']), '__ENEMY_NAME__': escape(enemy['name']),
+        '__AFTER__': str(hp_after), '__BEFORE__': str(before_hp),
+        '__SPELL_HTML__': spell_html, '__SUMMARY__': summary,
+    }
+    for key, val in values.items():
+        template = template.replace(key, val)
+    return template
+
+
+@st.dialog("⚔️ 드래곤의 공격!")
+def show_battle_attack_dialog():
+    """Always shows the scene at the viewport center; no scrolling back to the arena."""
+    battle = st.session_state.get('dragon_battle')
+    if not battle or not battle.get('answered'):
+        return
+    progress = st.session_state.progress
+    game = progress['game']
+    dragon_key = game['active']
+    stage = evolution_stage(completed_unit_count(progress), len(game['won_battles']))
+    enemy_id = battle.get('enemy')
+    if enemy_id not in MONSTERS:
+        enemy_id = monster_for_scope(battle['scope'], completed_unit_count(progress))
+    hit = bool(battle.get('last_correct'))
+    hp_after = max(0, 100 - 25 * battle['correct'])
+    scene_html = battle_attack_html(dragon_key, stage, enemy_id,
+                                    battle.get('last_skill', ''), hit, hp_after)
+    components.html(scene_html, height=278, scrolling=False)
+    if not hit:
+        q = battle['questions'][battle['index']]
+        st.caption(f"이번 정답은 '{q['answer']}'이에요. 기억하고 다시 도전해요!")
+    n = len(battle['questions'])
+    next_label = '배틀 결과 보기' if battle['index'] + 1 >= n else '다음 문제로 가기'
+    if st.button('➡️ ' + next_label, key=f"dragon_dialog_next_{battle['serial']}_{battle['index']}",
+                 type='primary', use_container_width=True):
+        battle['index'] += 1
+        battle['selected'] = None
+        battle['answered'] = False
+        st.rerun()
+    if st.button('배틀 종료', key=f"dragon_dialog_quit_{battle['serial']}_{battle['index']}",
+                 use_container_width=True):
+        st.session_state.dragon_battle = None
+        st.rerun()
+
+
 def page_dragons():
     """기존 v1.2.0 배틀 로직을 유지한 카드형 캐릭터 및 스킬 인터페이스."""
     kid_heading('🐉', '드래곤 가디언즈', '한자를 익히고, 기술을 배우고, 멋진 수호룡으로 성장해요!')
@@ -1041,7 +1200,6 @@ def page_dragons():
     st.caption(f"문제 {index+1} / {n} · 현재 정답 {battle['correct']}개 · 상대 {enemy['name']}")
     q = battle["questions"][index]
     enemy_hp = max(0, 100 - 25 * battle["correct"])
-    hit = bool(battle.get("answered") and battle.get("last_correct"))
     with st.container(key="dragon_battle_arena"):
         col1, col2 = st.columns([1, 1], gap="small")
         with col1:
@@ -1050,7 +1208,7 @@ def page_dragons():
                 st.markdown(f'<div class="dragon-art-caption">{escape(dragon["name"])} · 내 드래곤</div>',
                             unsafe_allow_html=True)
         with col2:
-            with st.container(key="dragon_battle_enemy_hit" if hit else "dragon_battle_enemy"):
+            with st.container(key="dragon_battle_enemy"):
                 art = monster_image(enemy_id)
                 if art:
                     st.image(art, width=176)
@@ -1061,18 +1219,6 @@ def page_dragons():
                 st.markdown(f'<div class="dragon-art-caption">{escape(enemy["name"])}{badge} · HP {enemy_hp}/100</div>',
                             unsafe_allow_html=True)
                 st.progress(enemy_hp / 100)
-        # 기술 발동 후 한 번 재실행한 화면에서만 나타나는 이동 이미지.
-        # 같은 전투 안의 버튼을 누르는 평상시 rerun에는 발사되지 않습니다.
-        if hit:
-            art = effect_image(chosen, battle.get("last_skill", ""))
-            if art:
-                encoded = base64.b64encode(Path(art).read_bytes()).decode("ascii")
-                st.markdown(
-                    f'<div class="dragon-projectile" aria-label="{escape(battle["last_skill"])} 공격 효과">'
-                    f'<img alt="{escape(battle["last_skill"])} 기술 이미지" '
-                    f'src="data:image/webp;base64,{encoded}"/></div>',
-                    unsafe_allow_html=True,
-                )
     # 기술은 캐릭터 바로 아래에서 고릅니다. 이미지 + 한 번 탭하는 버튼만 유지.
     if not battle["answered"]:
         skill_names = [entry[2] for entry in skills]
@@ -1123,7 +1269,10 @@ def page_dragons():
             battle["last_skill"] = battle["move"]
             if correct:
                 battle["correct"] += 1
-            st.rerun()
+            # Native modal stays centered on mobile regardless of the button's scroll position.
+            # One self-contained iframe plays the full image flight instead of relying on
+            # Streamlit's version-dependent markdown wrappers or :has() CSS selectors.
+            show_battle_attack_dialog()
     else:
         st.markdown(f'<div class="dragon-skill-shout">{escape(dragon["name"])}의 '
                     f'{escape(battle["last_skill"])}!</div>', unsafe_allow_html=True)
@@ -1133,6 +1282,9 @@ def page_dragons():
                         '</div>', unsafe_allow_html=True)
         else:
             st.warning(f"공격이 빗나갔어요! 정답은 '{q['answer']}'입니다. 다시 도전해요.")
+        if st.button("▶ 공격 장면 다시 보기", key=f"dragon_replay_{battle['serial']}_{index}",
+                     use_container_width=True):
+            show_battle_attack_dialog()
         if st.button("다음 문제" if index+1 < n else "배틀 결과 보기",
                      type="primary", use_container_width=True):
             battle["index"] += 1
@@ -1982,4 +2134,4 @@ elif menu=='드래곤 게임':
 else:
     page_records()
 st.divider()
-st.caption('한자 탐험대 v1.2.3.2 · 개인 학습용 · 시험 공식 모의고사는 아닙니다.')
+st.caption('한자 탐험대 v1.2.3.3 · 개인 학습용 · 시험 공식 모의고사는 아닙니다.')
