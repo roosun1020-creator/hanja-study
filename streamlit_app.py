@@ -1,4 +1,4 @@
-"""한자 탐험대 v1.2.3.3 | 모바일 중앙 배틀 애니메이션 및 정답 화면 개선."""
+"""한자 탐험대 v1.2.3.4 | 모바일 공격 이동 및 몬스터 이름·HP 겹침 수정."""
 
 import json
 import random
@@ -12,7 +12,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="한자 탐험대 v1.2.3.3",
+    page_title="한자 탐험대 v1.2.3.4",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -888,117 +888,212 @@ def _battle_image_data(path):
 
 
 def battle_attack_html(dragon_key, dragon_stage, enemy_id, move, is_correct, hp_after):
-    """Self-contained HTML/CSS animation. No dependency on parent Streamlit DOM/scroll."""
-    drag = DRAGONS[dragon_key]
+    """Mobile-safe, self-contained battle animation with separate enemy name/HP rows."""
+    dragon = DRAGONS[dragon_key]
     enemy = MONSTERS[enemy_id]
     player_src = _battle_image_data(dragon_image(dragon_key, dragon_stage))
     enemy_src = _battle_image_data(monster_image(enemy_id))
     spell_src = _battle_image_data(effect_image(dragon_key, move)) if is_correct else ""
-    player_html = (f'<img src="{player_src}" alt="{escape(drag["name"])} 드래곤"/>'
-                   if player_src else f'<span class="fallback">{drag["icon"]}🐉</span>')
-    enemy_html = (f'<img src="{enemy_src}" alt="{escape(enemy["name"])} 몬스터"/>'
+    player_html = (f'<img src="{player_src}" alt="{escape(dragon["name"])}"/>'
+                   if player_src else f'<span class="fallback">{dragon["icon"]}🐉</span>')
+    enemy_html = (f'<img src="{enemy_src}" alt="{escape(enemy["name"])}"/>'
                   if enemy_src else f'<span class="fallback">{enemy["emoji"]}</span>')
-    spell_html = (f'<img class="projectile" src="{spell_src}" alt="{escape(move)} 공격 이미지"/>'
-                  if spell_src else '')
+    projectile_html = (f'<img class="projectile" id="projectile" src="{spell_src}" alt="{escape(move)}"/>'
+                       if spell_src else '')
     before_hp = min(100, hp_after + (25 if is_correct else 0))
     summary = (f'✨ 공격 성공! {escape(enemy["name"])}에게 25 피해!'
-               if is_correct else f'📖 아쉬워요! 다시 배우면 더 강해져요.')
-    scene_type = 'hit' if is_correct else 'miss'
+               if is_correct else '📖 아쉬워요! 한 번 더 연습하면 더 강해져요.')
     template = r"""<!DOCTYPE html>
 <html lang="ko"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <style>
-*{box-sizing:border-box}html,body{padding:0;margin:0;background:transparent;
- font-family:system-ui,-apple-system,'Malgun Gothic',sans-serif;overflow:hidden;}
-.scene{position:relative;width:100%;height:272px;border-radius:18px;
+*{box-sizing:border-box}
+html,body{padding:0;margin:0;background:transparent;overflow:hidden;
+ font-family:system-ui,-apple-system,'Malgun Gothic',sans-serif}
+.scene{position:relative;width:100%;height:290px;border-radius:18px;
  background:linear-gradient(180deg,#F0F9FF,#F6F3FF 65%,#E8F7E8);
- border:2px solid #E2D5F3;overflow:hidden;isolation:isolate;}
-.scene:before{content:"";position:absolute;left:0;right:0;bottom:32px;height:30px;
- background:linear-gradient(#C3E7B5,#D7E8AA);border-radius:50%;opacity:.75;}
-.banner{position:absolute;z-index:4;left:3%;right:3%;top:7px;text-align:center;
- font-size:clamp(16px,4.3vw,22px);font-weight:950;color:#593F94;
- text-shadow:0 1px #fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.unit{position:absolute;top:40px;width:43%;height:165px;z-index:2;display:flex;
- flex-direction:column;align-items:center;justify-content:flex-end;gap:3px;}
-.player{left:2%}.target{right:2%}
-.unit img{max-width:100%;width:auto;height:auto;max-height:125px;object-fit:contain;
- filter:drop-shadow(0 5px 4px rgba(77,60,95,.16));}
-.fallback{font-size:76px;line-height:1.1}
-.name{font-size:clamp(12px,3.25vw,17px);font-weight:850;white-space:nowrap;color:#3C376B;
- background:#ffffffd9;border-radius:11px;padding:3px 8px;max-width:100%;overflow:hidden;text-overflow:ellipsis;}
-.hp{font-size:12px;color:#455B72;background:#ffffffd6;border-radius:8px;padding:1px 7px;}
-.healthbar{width:79%;height:6px;border-radius:99px;background:#EEE8E9;overflow:hidden;margin-top:2px}
-.healthfill{height:100%;background:#EC776B;width:var(--before)}
-.projectile{position:absolute;top:97px;left:17%;width:clamp(68px,25%,126px);
- max-height:113px;height:auto;object-fit:contain;opacity:0;z-index:5;
- filter:drop-shadow(0 0 10px rgba(255,186,90,.55));pointer-events:none;}
-.impact{position:absolute;left:78%;top:109px;transform:translate(-50%,-50%) scale(.2);
- border:5px solid rgba(255,244,153,.9);border-radius:50%;width:64px;height:64px;
- opacity:0;z-index:6;pointer-events:none;}
-.result{position:absolute;z-index:7;bottom:7px;left:3%;right:3%;text-align:center;
- border-radius:13px;background:#FFFBF1;border:1px solid #EDDAAB;padding:8px 5px;
- color:#7A4B1D;font-size:clamp(12px,3.2vw,16px);font-weight:900;opacity:1;}
-.scene.miss .result{background:#FFF5FB;color:#7C4B76;border-color:#EDD4E9;}
-.scene.play.hit .projectile{animation:spellMove 3.55s cubic-bezier(.35,.05,.5,.97) .35s both;}
-.scene.play.hit .target img{animation:hitShake .67s ease-in-out 3.02s both;}
-.scene.play.hit .impact{animation:impactSpark .7s ease-out 3.00s both;}
-.scene.play.hit .healthfill{animation:healthReduce .6s ease-in-out 3.08s both;}
-.scene.play .result{opacity:0;animation:showResult .45s ease-out 3.52s forwards;}
-.scene.play.miss .result{animation-delay:.45s;}
-@keyframes spellMove{
-  0%{left:17%;opacity:0;transform:translate(-50%,-50%) scale(.42) rotate(-12deg);}
-  12%{opacity:1;}
-  48%{left:50%;opacity:1;transform:translate(-50%,-50%) scale(.88) rotate(9deg);}
-  73%{left:77%;opacity:1;transform:translate(-50%,-50%) scale(1.10) rotate(-5deg);}
-  83%{left:79%;opacity:1;transform:translate(-50%,-50%) scale(1.24);}
-  100%{left:79%;opacity:0;transform:translate(-50%,-50%) scale(1.36);}
-}
-@keyframes hitShake{0%,100%{transform:translateX(0);filter:none;}
- 25%{transform:translateX(-9px);filter:brightness(1.6);}60%{transform:translateX(8px);}}
-@keyframes impactSpark{0%{opacity:0;transform:translate(-50%,-50%) scale(.3)}
- 40%{opacity:1;transform:translate(-50%,-50%) scale(1.2)}
- 100%{opacity:0;transform:translate(-50%,-50%) scale(1.8)}}
-@keyframes healthReduce{from{width:var(--before)}to{width:var(--after)}}
-@keyframes showResult{from{opacity:0;transform:translateY(8px)}
- to{opacity:1;transform:translateY(0)}}
-@media(max-width:400px){.scene{height:250px}.unit{top:40px;height:146px}
- .unit img{max-height:105px}.projectile{top:90px;width:78px}
- .impact{top:96px}.fallback{font-size:53px}.result{font-size:13px}}
-@media(prefers-reduced-motion:reduce){.scene.play *{animation:none!important}
- .scene.play.hit .projectile{opacity:1;left:78%;transform:translate(-50%,-50%) scale(1)}
- .scene.play .healthfill{width:var(--after)}.scene.play .result{opacity:1}}
+ border:2px solid #E2D5F3;overflow:hidden;isolation:isolate}
+.scene:before{content:"";position:absolute;left:0;right:0;bottom:36px;height:24px;
+ background:linear-gradient(#C3E7B5,#D7E8AA);border-radius:50%;opacity:.72}
+.banner{position:absolute;z-index:4;left:6%;right:6%;top:7px;text-align:center;
+ font-size:clamp(16px,4.3vw,21px);font-weight:950;color:#593F94;
+ text-shadow:0 1px #fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.actors{position:absolute;left:8px;right:8px;top:39px;bottom:57px;z-index:2;
+ display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.unit{min-width:0;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end}
+.art{flex:1;min-height:0;width:100%;display:flex;align-items:flex-end;justify-content:center}
+.art img{display:block;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;
+ filter:drop-shadow(0 5px 4px rgba(77,60,95,.16))}
+.fallback{font-size:clamp(45px,15vw,75px);line-height:1}
+.stats{flex:0 0 52px;width:100%;display:flex;flex-direction:column;justify-content:center;
+ align-items:center;gap:2px;min-height:52px;position:relative;z-index:4}
+.name{display:block;max-width:100%;line-height:19px;min-height:23px;
+ padding:2px 7px;font-size:clamp(11px,3.25vw,15px);font-weight:850;color:#3C376B;
+ border-radius:10px;background:#ffffffea;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hp{font-size:12px;line-height:16px;min-height:17px;white-space:nowrap;
+ color:#455B72;background:#ffffffed;border-radius:8px;padding:0 7px}
+.healthbar{width:80%;height:7px;flex:0 0 7px;border-radius:99px;
+ background:#EEE8E9;overflow:hidden}
+.healthfill{height:100%;background:#EC776B;width:__BEFORE__%;transition:width .45s ease}
+.player .hp,.player .healthbar{visibility:hidden}
+.projectile{position:absolute;left:0;top:0;width:clamp(62px,28vw,115px);
+ max-height:120px;height:auto;object-fit:contain;z-index:8;opacity:0;
+ pointer-events:none;will-change:transform,opacity;
+ filter:drop-shadow(0 0 11px rgba(255,190,73,.62))}
+.trail{position:absolute;left:0;top:0;width:75px;height:35px;
+ border-radius:100%;background:radial-gradient(ellipse,rgba(255,255,255,.8),rgba(133,186,250,.37) 55%,transparent 75%);
+ opacity:0;pointer-events:none;z-index:7;filter:blur(5px);will-change:transform,opacity}
+.impact{position:absolute;width:69px;height:69px;left:0;top:0;border:5px solid #fff5a4;
+ border-radius:50%;opacity:0;pointer-events:none;z-index:9;transform:translate(-50%,-50%) scale(.3)}
+.impact.visible{animation:impactPulse .58s ease-out both}
+.target.damaged .art img{animation:hitShake .62s ease-in-out both}
+.result{position:absolute;z-index:10;bottom:7px;left:3%;right:3%;min-height:38px;
+ display:flex;align-items:center;justify-content:center;text-align:center;
+ border-radius:13px;background:#FFFBF1;border:1px solid #EDDAAB;padding:6px 5px;
+ color:#7A4B1D;font-size:clamp(11px,3.2vw,15px);font-weight:900;
+ opacity:0;transform:translateY(7px);transition:opacity .3s ease,transform .3s ease}
+.result.visible{opacity:1;transform:translateY(0)}
+.scene.miss .result{background:#FFF5FB;color:#7C4B76;border-color:#EDD4E9}
+.replay{position:absolute;z-index:11;top:7px;right:8px;font-size:11px;
+ border:1px solid #D7C8EF;border-radius:10px;background:#FFFFFFEA;
+ padding:4px 7px;color:#5A458E;cursor:pointer;display:none}
+.replay.visible{display:block}
+@keyframes hitShake{0%,100%{transform:translateX(0);filter:none}
+ 27%{transform:translateX(-8px);filter:brightness(1.5)}65%{transform:translateX(8px)}}
+@keyframes impactPulse{0%{opacity:0;transform:translate(-50%,-50%) scale(.25)}
+ 38%{opacity:1;transform:translate(-50%,-50%) scale(1.1)}
+ 100%{opacity:0;transform:translate(-50%,-50%) scale(1.9)}}
+@media(max-width:400px){.scene{height:266px}.actors{top:37px;bottom:54px;gap:5px}
+ .stats{flex-basis:52px;min-height:52px}.name{font-size:12px}
+ .projectile{width:72px;max-height:82px}.result{font-size:12px}}
 </style></head><body>
-<div id="battleScene" class="scene __SCENETYPE__" aria-label="드래곤 전투 공격 장면">
+<div class="scene __SCENETYPE__" id="battleScene" aria-label="드래곤 전투 공격 장면">
  <div class="banner">__MOVE__!</div>
- <div class="unit player">__PLAYER_HTML__<div class="name">__DRAGON_NAME__</div></div>
- <div class="unit target">__ENEMY_HTML__<div class="name">__ENEMY_NAME__</div>
-  <div class="hp">HP __AFTER__/100</div><div class="healthbar"><div class="healthfill" style="--before:__BEFORE__%;--after:__AFTER__%"></div></div>
+ <div class="actors">
+  <div class="unit player" id="player"><div class="art" id="playerArt">__PLAYER_HTML__</div>
+    <div class="stats"><div class="name">__DRAGON_NAME__</div>
+    <div class="hp">　</div><div class="healthbar"></div></div></div>
+  <div class="unit target" id="target"><div class="art" id="enemyArt">__ENEMY_HTML__</div>
+    <div class="stats"><div class="name" id="enemyName">__ENEMY_NAME__</div>
+    <div class="hp" id="enemyHp">HP __BEFORE__/100</div>
+    <div class="healthbar"><div class="healthfill" id="healthfill"></div></div></div></div>
  </div>
- __SPELL_HTML__
- <div class="impact"></div>
- <div class="result">__SUMMARY__</div>
+ <div id="trail" class="trail"></div>
+ __PROJECTILE_HTML__
+ <div id="impact" class="impact"></div>
+ <div class="result" id="result" aria-live="polite">__SUMMARY__</div>
+ <button type="button" class="replay" id="replay" aria-label="공격 움직임 다시 보기">↻ 다시 보기</button>
 </div>
 <script>
 (function(){
- const stage=document.getElementById('battleScene');
- const imgs=Array.from(stage.querySelectorAll('img'));
- let done=false;
- function play(){if(done)return;done=true;requestAnimationFrame(()=>stage.classList.add('play'));}
- const pending=imgs.map(img=>(typeof img.decode==='function'
-   ? img.decode().catch(()=>{}) : Promise.resolve()));
- Promise.all(pending).then(()=>setTimeout(play,200));
- setTimeout(play,1200); // mobile image decoding fallback
+  'use strict';
+  const scene=document.getElementById('battleScene');
+  const proj=document.getElementById('projectile');
+  const trail=document.getElementById('trail');
+  const impact=document.getElementById('impact');
+  const target=document.getElementById('target');
+  const result=document.getElementById('result');
+  const replay=document.getElementById('replay');
+  const hp=document.getElementById('enemyHp');
+  const healthfill=document.getElementById('healthfill');
+  const before=Number('__BEFORE__');
+  const after=Number('__AFTER__');
+  let animationId=0;
+  let runId=0;
+  // An explicit answer-button action starts this short battle animation.
+  // Mobile reduced-motion settings previously forced the projectile to the end
+  // immediately; its flight is now calculated by requestAnimationFrame instead.
+  const hasHit=scene.classList.contains('hit') && !!proj;
+  function place(el,x,y,scale,opacity){
+    if(!el)return;
+    el.style.transform='translate3d('+x.toFixed(2)+'px,'+y.toFixed(2)+'px,0) translate(-50%,-50%) scale('+scale.toFixed(3)+')';
+    el.style.opacity=String(opacity);
+  }
+  function newRun(){
+    runId++;
+    const token=runId;
+    cancelAnimationFrame(animationId);
+    result.classList.remove('visible');
+    replay.classList.remove('visible');
+    target.classList.remove('damaged');
+    impact.classList.remove('visible');
+    healthfill.style.width=before+'%';
+    hp.textContent='HP '+before+'/100';
+    if(proj){proj.style.opacity='0';proj.style.transform='translate3d(-999px,0,0)';}
+    if(trail)trail.style.opacity='0';
+    if(!hasHit){
+      window.setTimeout(()=>{
+        if(token!==runId)return;
+        result.classList.add('visible');replay.classList.add('visible');
+      },450);
+      return;
+    }
+    // Element positions are recomputed for the actual iframe width, not hardcoded
+    // percentage offsets which can place sprites outside narrow mobile scenes.
+    const rScene=scene.getBoundingClientRect();
+    const rPlayer=document.getElementById('playerArt').getBoundingClientRect();
+    const rEnemy=document.getElementById('enemyArt').getBoundingClientRect();
+    const startX=rPlayer.left-rScene.left+rPlayer.width*.73;
+    const startY=rPlayer.top-rScene.top+rPlayer.height*.54;
+    const endX=rEnemy.left-rScene.left+rEnemy.width*.56;
+    const endY=rEnemy.top-rScene.top+rEnemy.height*.56;
+    const flight=3150;
+    let initial=null;
+    function frame(now){
+      if(token!==runId)return;
+      if(initial===null)initial=now;
+      const p=Math.min(1,(now-initial)/flight);
+      const ease=p*p*(3-2*p);
+      const x=startX+(endX-startX)*ease;
+      const y=startY+(endY-startY)*ease-13*Math.sin(Math.PI*p);
+      const scale=.52+(.61*p);
+      const alpha=Math.min(1,p*7,(1-p)*10);
+      place(proj,x,y,scale,Math.max(0,alpha));
+      place(trail,x-18,y+6,.8+(.45*p),Math.min(.75,Math.max(0,alpha)*.7));
+      scene.dataset.flightProgress=p.toFixed(3);
+      if(p<1){animationId=requestAnimationFrame(frame);return;}
+      proj.style.opacity='0';trail.style.opacity='0';
+      place(impact,endX,endY,1,0);
+      // Reflow lets replay restart the impact/shake animations.
+      void impact.offsetWidth;
+      impact.classList.add('visible');
+      target.classList.add('damaged');
+      hp.textContent='HP '+after+'/100';
+      healthfill.style.width=after+'%';
+      window.setTimeout(()=>{
+        if(token!==runId)return;
+        result.classList.add('visible');replay.classList.add('visible');
+      },550);
+    }
+    animationId=requestAnimationFrame(frame);
+  }
+  replay.addEventListener('click',newRun);
+  const sprites=Array.from(scene.querySelectorAll('img'));
+  const ready=Promise.all(sprites.map(img=>{
+    if(typeof img.decode==='function')return img.decode().catch(()=>{});
+    if(img.complete)return Promise.resolve();
+    return new Promise(resolve=>{img.addEventListener('load',resolve,{once:true});img.addEventListener('error',resolve,{once:true});});
+  }));
+  let launched=false;
+  function start(){if(launched)return;launched=true;requestAnimationFrame(()=>requestAnimationFrame(newRun));}
+  ready.then(start);
+  setTimeout(start,1800); // Handles image decoding failures in mobile webviews.
 })();
 </script></body></html>"""
     values = {
-        '__SCENETYPE__': scene_type, '__MOVE__': escape(move),
-        '__PLAYER_HTML__': player_html, '__ENEMY_HTML__': enemy_html,
-        '__DRAGON_NAME__': escape(drag['name']), '__ENEMY_NAME__': escape(enemy['name']),
-        '__AFTER__': str(hp_after), '__BEFORE__': str(before_hp),
-        '__SPELL_HTML__': spell_html, '__SUMMARY__': summary,
+        '__SCENETYPE__': 'hit' if is_correct else 'miss',
+        '__MOVE__': escape(move),
+        '__PLAYER_HTML__': player_html,
+        '__ENEMY_HTML__': enemy_html,
+        '__PROJECTILE_HTML__': projectile_html,
+        '__DRAGON_NAME__': escape(dragon['name']),
+        '__ENEMY_NAME__': escape(enemy['name']),
+        '__AFTER__': str(hp_after),
+        '__BEFORE__': str(before_hp),
+        '__SUMMARY__': summary,
     }
-    for key, val in values.items():
-        template = template.replace(key, val)
+    for key, value in values.items():
+        template = template.replace(key, value)
     return template
 
 
@@ -1019,7 +1114,7 @@ def show_battle_attack_dialog():
     hp_after = max(0, 100 - 25 * battle['correct'])
     scene_html = battle_attack_html(dragon_key, stage, enemy_id,
                                     battle.get('last_skill', ''), hit, hp_after)
-    components.html(scene_html, height=278, scrolling=False)
+    components.html(scene_html, height=302, scrolling=False)
     if not hit:
         q = battle['questions'][battle['index']]
         st.caption(f"이번 정답은 '{q['answer']}'이에요. 기억하고 다시 도전해요!")
@@ -2134,4 +2229,4 @@ elif menu=='드래곤 게임':
 else:
     page_records()
 st.divider()
-st.caption('한자 탐험대 v1.2.3.3 · 개인 학습용 · 시험 공식 모의고사는 아닙니다.')
+st.caption('한자 탐험대 v1.2.3.4 · 개인 학습용 · 시험 공식 모의고사는 아닙니다.')
