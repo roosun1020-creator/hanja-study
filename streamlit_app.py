@@ -1820,25 +1820,42 @@ div.stButton>button:focus-visible{outline:4px solid #E5BEFF!important;outline-of
   .skill-gallery{grid-template-columns:repeat(2,minmax(0,1fr));}
   .kid-notice{font-size:14px;}
 }
-/* v1.2.3: larger grouped unit chooser in both 배우기 and 쓰기 (shared component). */
+/* v1.2.3.1 — ONLY range tabs and writing hanja increase.
+   Keep the original v1.2.2 CSS for individual 1단원, 2단원, ... buttons.
+   Both text and its Streamlit Markdown wrapper receive font sizing. */
 [class*="st-key-unit_groups_"] div.stButton > button {
-  min-height:63px!important; padding:9px 4px!important;border-radius:17px!important;
-  font-size:clamp(19px,2.45vw,24px)!important;font-weight:950!important;
+  min-height:64px!important;
+  padding:8px 2px!important;
+  border-radius:17px!important;
+  font-size:clamp(24px,2.8vw,29px)!important;
+  font-weight:950!important;
 }
-[class*="st-key-unit_groups_"] div.stButton > button p {
-  font-size:inherit!important;font-weight:950!important;line-height:1.2!important;
+[class*="st-key-unit_groups_"] div.stButton > button [data-testid="stMarkdownContainer"],
+[class*="st-key-unit_groups_"] div.stButton > button p,
+[class*="st-key-unit_groups_"] div.stButton > button span {
+  font-size:inherit!important;
+  font-weight:950!important;
+  line-height:1.2!important;
 }
-[class*="st-key-units_"] div.stButton > button p {
-  font-size:clamp(20px,2.6vw,26px)!important;font-weight:950!important;
+/* 쓰기에서 '한자를 하나 골라 보세요': make the actual glyph large. */
+.st-key-stroke_unit_buttons div.stButton > button {
+  min-height:112px!important;
+  padding:12px 3px!important;
+  font-size:clamp(55px,7vw,70px)!important;
+  font-family:"Noto Serif CJK KR","Batang",serif;
 }
-/* The big hanja character choices in 쓰기: both 5-character unit and gallery. */
-.st-key-stroke_unit_buttons div.stButton>button {
-  font-size:clamp(49px,6.5vw,66px)!important;min-height:105px!important;
+.st-key-stroke_unit_buttons div.stButton > button [data-testid="stMarkdownContainer"],
+.st-key-stroke_unit_buttons div.stButton > button p,
+.st-key-stroke_unit_buttons div.stButton > button span {
+  font-size:inherit!important;
+  line-height:1.15!important;
+  font-weight:800!important;
 }
-.st-key-stroke_unit_buttons div.stButton>button p{font-size:inherit!important;line-height:1.1!important;}
-[class*="st-key-hanja_gallery_"] div.stButton>button{min-height:112px!important;}
-[class*="st-key-hanja_gallery_"] div.stButton>button p{
-  font-size:clamp(26px,3.8vw,36px)!important;font-family:"Noto Serif CJK KR","Batang",serif;
+/* Other gallery choices are unchanged compared to v1.2.3. */
+[class*="st-key-hanja_gallery_"] div.stButton > button{min-height:112px!important;}
+[class*="st-key-hanja_gallery_"] div.stButton > button p {
+  font-size:clamp(26px,3.8vw,36px)!important;
+  font-family:"Noto Serif CJK KR","Batang",serif;
 }
 /* RPG monster art, skill picture cards, and animated strike feedback. */
 .st-key-dragon_battle_enemy img,.st-key-dragon_battle_enemy_hit img{
@@ -1869,9 +1886,12 @@ div.stButton>button:focus-visible{outline:4px solid #E5BEFF!important;outline-of
  background:#FFFDF9;text-align:center;padding:9px;margin-bottom:7px;}
 [class*="st-key-dragon_catalog_"] img{max-height:113px;object-fit:contain;margin:auto;}
 @media(max-width:700px){
- [class*="st-key-unit_groups_"] div.stButton>button{font-size:18px!important;min-height:59px!important;padding:6px 2px!important;}
- [class*="st-key-units_"] div.stButton>button p{font-size:19px!important;}
- .st-key-stroke_unit_buttons div.stButton>button{font-size:49px!important;min-height:94px!important;}
+ /* Screen width has up to four range tabs, so boost size without clipping 16~20. */
+ [class*="st-key-unit_groups_"] div.stButton>button{
+   font-size:clamp(21px,5.6vw,25px)!important;min-height:63px!important;padding:7px 2px!important;
+ }
+ /* Do not override st-key-units_: v1.2.2 retains 14px on mobile. */
+ .st-key-stroke_unit_buttons div.stButton>button{font-size:55px!important;min-height:106px!important;}
  [class*="st-key-hanja_gallery_"] div.stButton>button p{font-size:27px!important;}
  [class*="st-key-dragon_skill_card_"] img{max-height:100px;}
  .st-key-dragon_battle_enemy img,.st-key-dragon_battle_enemy_hit img{max-height:150px;}
@@ -1920,4 +1940,4 @@ elif menu=='드래곤 게임':
 else:
     page_records()
 st.divider()
-st.caption('한자 탐험대 v1.2.3 · 개인 학습용 · 시험 공식 모의고사는 아닙니다.')
+st.caption('한자 탐험대 v1.2.3.1 · 개인 학습용 · 시험 공식 모의고사는 아닙니다.')
