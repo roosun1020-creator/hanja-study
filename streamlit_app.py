@@ -1,4 +1,4 @@
-"""한자 탐험대 v1.2.3.5 | 모바일 공격 이동 및 몬스터 이름·HP 겹침 수정."""
+"""한자 탐험대 v1.2.3.6 | 모바일 최적화 점검 및 한자 카드 맞추기."""
 
 import json
 import random
@@ -12,7 +12,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="한자 탐험대 v1.2.3.5",
+    page_title="한자 탐험대 v1.2.3.6",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -555,6 +555,95 @@ def unit_picker(key, count, label_prefix="", complete_func=None):
     return st.session_state[unit_key]
 
 
+
+# ----- v1.2.3.6: flip cards; recall practice never changes quiz/review scores -----
+FLASHCARD_SCOPES = {
+    "8급 50자": GROUPS["8급"],
+    "신규 7급Ⅱ 50자": GROUPS["7급Ⅱ"],
+    "신규 7급 50자": GROUPS["7급"],
+    "신규 7급 100자": NEW,
+    "7급 전체 150자": ALL,
+}
+
+
+def fresh_flashcard_deck(scope, previous_round=0):
+    """Shuffle all available cards once; show every character before repeating."""
+    if scope not in FLASHCARD_SCOPES:
+        raise ValueError("알 수 없는 카드 범위입니다.")
+    pool = FLASHCARD_SCOPES[scope]
+    return {"scope": scope,
+            "deck": random.sample([card["char"] for card in pool], len(pool)),
+            "index": 0, "revealed": False,
+            "round": previous_round + 1}
+
+
+def page_flashcards():
+    kid_heading("🃏", "한자 카드 맞추기", "카드를 터치하면 뜻과 음이 나타나요!")
+    options = [
+        ("8급 50자", "🏅 8급 · 50자"),
+        ("신규 7급Ⅱ 50자", "🌱 신규 7급Ⅱ · 50자"),
+        ("신규 7급 50자", "🌿 신규 7급 · 50자"),
+        ("신규 7급 100자", "⭐ 신규 7급 · 100자"),
+        ("7급 전체 150자", "🏰 7급 전체 · 150자"),
+    ]
+    scope = tile_picker(options, "flashcard_scope", cols=2,
+                        title="어떤 한자를 맞혀 볼까요?")
+    game = st.session_state.get("flashcard_deck")
+    if (not isinstance(game, dict) or game.get("scope") != scope or
+            not game.get("deck") or game.get("index", 0) >= len(game["deck"])):
+        game = fresh_flashcard_deck(scope)
+        st.session_state.flashcard_deck = game
+
+    idx = game["index"]
+    total = len(game["deck"])
+    card = INDEX[game["deck"][idx]]
+    revealed = game["revealed"]
+    st.markdown(
+        f'<div class="flashcard-meter">'
+        f'<strong>🎴 {idx + 1} / {total}</strong>'
+        f'<span>· {escape(card["grade"])} · {game["round"]}번째 모험</span>'
+        '</div>', unsafe_allow_html=True)
+    st.progress(idx / total)
+    st.markdown(
+        '<div class="flashcard-hint">'
+        + ('✨ 정답을 확인했어요! 다음 카드를 만나 보세요.' if revealed
+           else '👆 아래 한자 카드를 눌러 뜻과 음을 확인해 보세요.')
+        + '</div>', unsafe_allow_html=True)
+    with st.container(key="flashcard_back" if revealed else "flashcard_front"):
+        if st.button(label(card) if revealed else card["char"],
+                     key="flashcard_flip_button", use_container_width=True,
+                     help="카드를 뒤집어 한자와 뜻·음을 번갈아 보기"):
+            game["revealed"] = not revealed
+            st.rerun()
+    if revealed:
+        st.markdown(
+            f'<div class="flashcard-reveal">'
+            f'<span>{escape(card["char"])}</span>의 뜻과 음 · '
+            f'<strong>{escape(label(card))}</strong>'
+            '</div>', unsafe_allow_html=True)
+
+    left, right = st.columns([1, 2], gap="small")
+    with left:
+        if st.button("🔀 다시 섞기", key="flashcard_restart",
+                     use_container_width=True):
+            st.session_state.flashcard_deck = fresh_flashcard_deck(
+                scope, previous_round=game["round"])
+            st.rerun()
+    with right:
+        is_last = idx == total - 1
+        next_label = "🎉 모두 봤어요! 새 카드 섞기" if is_last else "다음 카드 ➡️"
+        if st.button(next_label, key="flashcard_next", type="primary",
+                     disabled=not revealed, use_container_width=True):
+            if is_last:
+                st.session_state.flashcard_deck = fresh_flashcard_deck(
+                    scope, previous_round=game["round"])
+            else:
+                game["index"] += 1
+                game["revealed"] = False
+            st.rerun()
+    st.caption("카드는 한 번씩 무작위 순서로 나옵니다. 카드 확인은 퀴즈 점수·복습 일정에 영향을 주지 않아요.")
+
+
 def select_stroke_char(cards, key, limit=12):
     """Searchable large hanja tile gallery; safe for 150 symbols and mobile."""
     available = {c['char'] for c in cards}
@@ -880,6 +969,7 @@ def dragon_art(key, stage, caption=None):
 
 
 
+@st.cache_data(show_spinner=False, max_entries=64)
 def _battle_image_data(path):
     """Battle assets are local WebP files; inline URLs work in iframe/mobile browsers."""
     if not path or not Path(path).is_file():
@@ -2187,6 +2277,61 @@ div.stButton>button:focus-visible{outline:4px solid #E5BEFF!important;outline-of
  .st-key-dragon_battle_enemy_hit img{animation:none!important;}
 }
 @media (prefers-reduced-motion:reduce){div.stButton>button,.dragon-attack-result{animation:none!important;transition:none!important;}}
+
+/* v1.2.3.6 — consistent readable mobile labels, scoped overrides only. */
+@media(max-width:700px){
+ .st-key-kid_top_nav div.stButton>button{font-size:13px!important;}
+ .record-reading{font-size:12px!important;white-space:normal!important;
+   line-height:1.3!important;overflow-wrap:anywhere;}
+ [class*="st-key-dragon_skill_card_"] div.stButton>button{font-size:12px!important;}
+}
+/* v1.2.3.6 — tactile flipcard screen, scoped to new flashcard containers. */
+.flashcard-meter {display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  margin:18px 0 5px;color:#644A86;font-size:16px;font-weight:750;}
+.flashcard-meter strong {font-size:20px;color:#503B78;}
+.flashcard-meter span {color:#7B6A97;font-size:14px;}
+.flashcard-hint {text-align:center;font-size:16px;font-weight:800;
+  color:#6D518E;margin:13px 0 11px;}
+.st-key-flashcard_front div.stButton>button,
+.st-key-flashcard_back div.stButton>button {
+  min-height:250px!important;border-radius:27px!important;
+  padding:24px 12px!important;border:3px solid #DDD0F5!important;
+  background:linear-gradient(145deg,#FFFFFF 8%,#F6EEFF 98%)!important;
+  color:#43366D!important;text-align:center!important;justify-content:center!important;
+  box-shadow:0 8px 0 #E5D9F3,0 12px 20px rgba(100,74,130,.08)!important;
+  white-space:normal!important;transition:transform .12s ease,box-shadow .12s ease!important;
+}
+.st-key-flashcard_front div.stButton>button:active,
+.st-key-flashcard_back div.stButton>button:active{
+  transform:translateY(4px);box-shadow:0 4px 0 #E5D9F3!important;}
+.st-key-flashcard_front div.stButton>button p,
+.st-key-flashcard_front div.stButton>button span {
+  font-family:'Noto Serif CJK KR','Batang',serif!important;
+  font-size:clamp(88px,16vw,132px)!important;font-weight:800!important;line-height:1.15!important;
+}
+.st-key-flashcard_back div.stButton>button {
+  background:linear-gradient(145deg,#FFFDF1 10%,#F2F7FF 100%)!important;
+  border-color:#E2CF9F!important;
+}
+.st-key-flashcard_back div.stButton>button p,
+.st-key-flashcard_back div.stButton>button span {
+  font-size:clamp(31px,6vw,47px)!important;line-height:1.3!important;
+  font-weight:900!important;white-space:normal!important;word-break:keep-all!important;
+}
+.flashcard-reveal{font-size:17px;text-align:center;margin:12px 0;
+  color:#625077;font-weight:700;}
+.flashcard-reveal span{font-family:'Noto Serif CJK KR','Batang',serif;
+  color:#71459D;font-size:25px;font-weight:900;margin-right:3px;}
+.flashcard-reveal strong{color:#453A67;}
+@media(max-width:700px){
+  .st-key-flashcard_front div.stButton>button,
+  .st-key-flashcard_back div.stButton>button{min-height:220px!important;padding:18px 10px!important;}
+  .st-key-flashcard_front div.stButton>button p,
+  .st-key-flashcard_front div.stButton>button span {font-size:105px!important;}
+  .st-key-flashcard_back div.stButton>button p,
+  .st-key-flashcard_back div.stButton>button span {font-size:35px!important;}
+  .flashcard-hint{font-size:14px;}
+}
 </style>
 """,unsafe_allow_html=True)
 
@@ -2199,7 +2344,8 @@ st.markdown("""
 </section>
 """,unsafe_allow_html=True)
 NAV_ITEMS=[('홈','🏠 홈'),('한자 학습','📚 배우기'),('획순 쓰기','✍️ 쓰기'),
-           ('퀴즈','🎯 퀴즈'),('복습','🧠 복습'),('드래곤 게임','🐉 드래곤'),('학습 기록','🏆 기록')]
+           ('퀴즈','🎯 퀴즈'),('복습','🧠 복습'),('카드 맞추기','🃏 카드'),
+           ('드래곤 게임','🐉 드래곤'),('학습 기록','🏆 기록')]
 if st.session_state.get('main_nav') not in {item[0] for item in NAV_ITEMS}:
     st.session_state.main_nav='홈'
 with st.container(key='kid_top_nav'):
@@ -2226,7 +2372,9 @@ elif menu=='복습':
     page_review()
 elif menu=='드래곤 게임':
     page_dragons()
+elif menu=='카드 맞추기':
+    page_flashcards()
 else:
     page_records()
 st.divider()
-st.caption('한자 탐험대 v1.2.3.5 · 개인 학습용 · 시험 공식 모의고사는 아닙니다.')
+st.caption('한자 탐험대 v1.2.3.6 · 개인 학습용 · 시험 공식 모의고사는 아닙니다.')
