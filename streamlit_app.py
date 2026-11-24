@@ -1,4 +1,4 @@
-"""한자 탐험대 v1.2.3.4 | 모바일 공격 이동 및 몬스터 이름·HP 겹침 수정."""
+"""한자 탐험대 v1.2.3.5 | 모바일 공격 이동 및 몬스터 이름·HP 겹침 수정."""
 
 import json
 import random
@@ -12,7 +12,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="한자 탐험대 v1.2.3.4",
+    page_title="한자 탐험대 v1.2.3.5",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -1037,7 +1037,7 @@ html,body{padding:0;margin:0;background:transparent;overflow:hidden;
     const startY=rPlayer.top-rScene.top+rPlayer.height*.54;
     const endX=rEnemy.left-rScene.left+rEnemy.width*.56;
     const endY=rEnemy.top-rScene.top+rEnemy.height*.56;
-    const flight=3150;
+    const flight=1500;
     let initial=null;
     function frame(now){
       if(token!==runId)return;
@@ -2229,4 +2229,4 @@ elif menu=='드래곤 게임':
 else:
     page_records()
 st.divider()
-st.caption('한자 탐험대 v1.2.3.4 · 개인 학습용 · 시험 공식 모의고사는 아닙니다.')
+st.caption('한자 탐험대 v1.2.3.5 · 개인 학습용 · 시험 공식 모의고사는 아닙니다.')
