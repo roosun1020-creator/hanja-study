@@ -1,4 +1,4 @@
-"""한자 탐험대 v1.2.3.7 | 모바일 최적화 점검 및 한자 카드 맞추기."""
+"""한자 탐험대 v1.2.3.8 | 모바일 최적화 점검 및 한자 카드 맞추기."""
 
 import json
 import random
@@ -12,7 +12,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="한자 탐험대 v1.2.3.7",
+    page_title="한자 탐험대 v1.2.3.8",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -556,7 +556,7 @@ def unit_picker(key, count, label_prefix="", complete_func=None):
 
 
 
-# ----- v1.2.3.7: flip cards; recall practice never changes quiz/review scores -----
+# ----- v1.2.3.8: flip cards; recall practice never changes quiz/review scores -----
 FLASHCARD_SCOPES = {
     "8급 50자": GROUPS["8급"],
     "7급Ⅰ 50자": GROUPS["7급"],
@@ -615,10 +615,13 @@ def page_flashcards():
         + ('✨ 정답을 확인했어요! 다음 카드를 만나 보세요.' if revealed
            else '👆 아래 한자 카드를 눌러 뜻과 음을 확인해 보세요.')
         + '</div>', unsafe_allow_html=True)
-    with st.container(key="flashcard_back" if revealed else "flashcard_front"):
+    # v1.2.3.8: 위젯 자신에게 고유 key를 주어 CSS가 실제 버튼에 적용되게 합니다.
+    # 이전 버전은 바깥 container key만 대상으로 지정하여 모바일에서 무시됐습니다.
+    with st.container(key="flashcard_area"):
         if st.button(label(card) if revealed else card["char"],
-                     key="flashcard_flip_button", use_container_width=True,
-                     help="카드를 뒤집어 한자와 뜻·음을 번갈아 보기"):
+                     key="flashcard_face_back" if revealed else "flashcard_face_front",
+                     use_container_width=True,
+                     help="카드를 눌러 한자와 뜻·음을 번갈아 보기"):
             game["revealed"] = not revealed
             st.rerun()
     if revealed:
@@ -2284,93 +2287,88 @@ div.stButton>button:focus-visible{outline:4px solid #E5BEFF!important;outline-of
 }
 @media (prefers-reduced-motion:reduce){div.stButton>button,.dragon-attack-result{animation:none!important;transition:none!important;}}
 
-/* v1.2.3.7 — consistent readable mobile labels, scoped overrides only. */
+/* v1.2.3.8 — consistent readable mobile labels, scoped overrides only. */
 @media(max-width:700px){
  .st-key-kid_top_nav div.stButton>button{font-size:13px!important;}
  .record-reading{font-size:12px!important;white-space:normal!important;
    line-height:1.3!important;overflow-wrap:anywhere;}
  [class*="st-key-dragon_skill_card_"] div.stButton>button{font-size:12px!important;}
 }
-/* v1.2.3.7 — 아동용 반응형 한자 카드: 카드/한자 모두 확대, 다른 메뉴에는 적용하지 않음. */
+/* v1.2.3.8 — 버튼 자체 key에 적용: 컨테이너 내부 구조에 의존하지 않음. */
 .flashcard-meter {display:flex;align-items:center;gap:9px;flex-wrap:wrap;
   margin:18px 0 5px;color:#644A86;font-size:16px;font-weight:750;}
 .flashcard-meter strong {font-size:20px;color:#503B78;}
 .flashcard-meter span {color:#7B6A97;font-size:14px;}
 .flashcard-hint {text-align:center;font-size:16px;font-weight:800;
   color:#6D518E;margin:13px 0 11px;}
-
-.st-key-flashcard_front div.stButton>button,
-.st-key-flashcard_back div.stButton>button {
+/* st.button(key=...)의 st-key-... 클래스는 버튼을 포함하는 요소에 붙습니다. */
+.st-key-flashcard_face_front button,
+.st-key-flashcard_face_back button {
   display:flex!important;align-items:center!important;justify-content:center!important;
-  width:100%!important;
-  min-height:clamp(420px,58dvh,680px)!important;
-  padding:28px 12px!important;
-  border:3px solid #DDD0F5!important;border-radius:32px!important;
-  background:linear-gradient(145deg,#FFFFFF 8%,#F6EEFF 98%)!important;
-  color:#43366D!important;text-align:center!important;
-  box-shadow:0 8px 0 #E5D9F3,0 12px 20px rgba(100,74,130,.08)!important;
-  white-space:normal!important;
+  width:100%!important;height:clamp(380px,58dvh,560px)!important;min-height:0!important;box-sizing:border-box!important;
+  padding:18px 14px!important;
+  border:3px solid #D8C4F1!important;border-radius:30px!important;
+  background:linear-gradient(145deg,#FFFFFF,#F4EDFF)!important;
+  color:#4B3777!important;text-align:center!important;
+  box-shadow:0 7px 0 #E8DCF5,0 11px 18px rgba(100,74,130,.09)!important;
+  white-space:normal!important;overflow:hidden!important;
   transition:transform .12s ease,box-shadow .12s ease!important;
 }
-.st-key-flashcard_front div.stButton>button:active,
-.st-key-flashcard_back div.stButton>button:active {
-  transform:translateY(4px);
-  box-shadow:0 4px 0 #E5D9F3!important;
+.st-key-flashcard_face_front button:active,
+.st-key-flashcard_face_back button:active {
+  transform:translateY(3px)!important;
+  box-shadow:0 4px 0 #E8DCF5!important;
 }
-/* Streamlit에서는 버튼의 실제 글자가 내부 p/span에 들어가므로 그 요소에도 크기를 강제합니다. */
-.st-key-flashcard_front div.stButton>button,
-.st-key-flashcard_front div.stButton>button [data-testid="stMarkdownContainer"],
-.st-key-flashcard_front div.stButton>button p,
-.st-key-flashcard_front div.stButton>button span {
-  font-family:'Noto Serif CJK KR','Batang',serif!important;
-  font-size:clamp(200px,26vw,400px)!important;
-  font-weight:850!important;line-height:1.05!important;
-  text-align:center!important;
+/* 버튼 내부 텍스트가 p·span으로 렌더링되더라도 크기를 별도 보장합니다. */
+.st-key-flashcard_face_front button,
+.st-key-flashcard_face_front button [data-testid="stMarkdownContainer"],
+.st-key-flashcard_face_front button [data-testid="stMarkdownContainer"] p,
+.st-key-flashcard_face_front button p,
+.st-key-flashcard_face_front button span {
+  font-family:'Noto Serif CJK KR','Noto Serif KR','Batang',serif!important;
+  font-size:clamp(180px,28vw,340px)!important;
+  font-weight:700!important;line-height:1.17!important;
+  text-align:center!important;word-break:keep-all!important;
 }
-.st-key-flashcard_back div.stButton>button {
-  background:linear-gradient(145deg,#FFFDF1 10%,#F2F7FF 100%)!important;
+.st-key-flashcard_face_back button {
+  background:linear-gradient(145deg,#FFFDF1,#F1F7FF)!important;
   border-color:#E2CF9F!important;
 }
-.st-key-flashcard_back div.stButton>button,
-.st-key-flashcard_back div.stButton>button [data-testid="stMarkdownContainer"],
-.st-key-flashcard_back div.stButton>button p,
-.st-key-flashcard_back div.stButton>button span {
-  font-size:clamp(38px,5vw,64px)!important;
-  line-height:1.3!important;font-weight:900!important;
-  white-space:normal!important;word-break:keep-all!important;text-align:center!important;
+.st-key-flashcard_face_back button,
+.st-key-flashcard_face_back button [data-testid="stMarkdownContainer"],
+.st-key-flashcard_face_back button [data-testid="stMarkdownContainer"] p,
+.st-key-flashcard_face_back button p,
+.st-key-flashcard_face_back button span {
+  font-size:clamp(34px,4vw,60px)!important;line-height:1.35!important;
+  font-weight:850!important;white-space:normal!important;
+  word-break:keep-all!important;text-align:center!important;
 }
 .flashcard-reveal {font-size:17px;text-align:center;margin:12px 0;
   color:#625077;font-weight:700;}
 .flashcard-reveal span {font-family:'Noto Serif CJK KR','Batang',serif;
   color:#71459D;font-size:25px;font-weight:900;margin-right:3px;}
 .flashcard-reveal strong {color:#453A67;}
-@media(max-width:700px){
-  /* 휴대전화에서는 높이는 화면의 약 절반, 한자는 가로 폭의 약 절반을 차지합니다. */
-  .st-key-flashcard_front div.stButton>button,
-  .st-key-flashcard_back div.stButton>button {
-    min-height:clamp(325px,53dvh,520px)!important;
-    padding:20px 8px!important;border-radius:26px!important;
+@media(max-width:700px) {
+  .st-key-flashcard_face_front button,
+  .st-key-flashcard_face_back button {
+    height:clamp(305px,45dvh,430px)!important;
+    padding:15px 8px!important;border-radius:25px!important;
   }
-  .st-key-flashcard_front div.stButton>button,
-  .st-key-flashcard_front div.stButton>button [data-testid="stMarkdownContainer"],
-  .st-key-flashcard_front div.stButton>button p,
-  .st-key-flashcard_front div.stButton>button span {
-    font-size:clamp(168px,50vw,245px)!important;
-    line-height:1.02!important;
+  .st-key-flashcard_face_front button,
+  .st-key-flashcard_face_front button [data-testid="stMarkdownContainer"],
+  .st-key-flashcard_face_front button [data-testid="stMarkdownContainer"] p,
+  .st-key-flashcard_face_front button p,
+  .st-key-flashcard_face_front button span {
+    font-size:clamp(150px,44vw,224px)!important;line-height:1.12!important;
   }
-  .st-key-flashcard_back div.stButton>button,
-  .st-key-flashcard_back div.stButton>button [data-testid="stMarkdownContainer"],
-  .st-key-flashcard_back div.stButton>button p,
-  .st-key-flashcard_back div.stButton>button span {
-    font-size:clamp(36px,9vw,54px)!important;line-height:1.35!important;
+  .st-key-flashcard_face_back button,
+  .st-key-flashcard_face_back button [data-testid="stMarkdownContainer"],
+  .st-key-flashcard_face_back button [data-testid="stMarkdownContainer"] p,
+  .st-key-flashcard_face_back button p,
+  .st-key-flashcard_face_back button span {
+    font-size:clamp(30px,8vw,46px)!important;line-height:1.25!important;
   }
   .flashcard-hint {font-size:14px;}
-}
-@media(max-width:360px){
-  .st-key-flashcard_front div.stButton>button,
-  .st-key-flashcard_front div.stButton>button [data-testid="stMarkdownContainer"],
-  .st-key-flashcard_front div.stButton>button p,
-  .st-key-flashcard_front div.stButton>button span {font-size:clamp(145px,47vw,180px)!important;}
 }
 </style>
 """,unsafe_allow_html=True)
@@ -2417,4 +2415,4 @@ elif menu=='카드 맞추기':
 else:
     page_records()
 st.divider()
-st.caption('한자 탐험대 v1.2.3.7 · 개인 학습용 · 시험 공식 모의고사는 아닙니다.')
+st.caption('한자 탐험대 v1.2.3.8 · 개인 학습용 · 시험 공식 모의고사는 아닙니다.')
