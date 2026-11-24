@@ -1,4 +1,4 @@
-"""한자 탐험대 v1.2.3.6 | 모바일 최적화 점검 및 한자 카드 맞추기."""
+"""한자 탐험대 v1.2.3.7 | 모바일 최적화 점검 및 한자 카드 맞추기."""
 
 import json
 import random
@@ -12,7 +12,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="한자 탐험대 v1.2.3.6",
+    page_title="한자 탐험대 v1.2.3.7",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -556,11 +556,11 @@ def unit_picker(key, count, label_prefix="", complete_func=None):
 
 
 
-# ----- v1.2.3.6: flip cards; recall practice never changes quiz/review scores -----
+# ----- v1.2.3.7: flip cards; recall practice never changes quiz/review scores -----
 FLASHCARD_SCOPES = {
     "8급 50자": GROUPS["8급"],
-    "신규 7급Ⅱ 50자": GROUPS["7급Ⅱ"],
-    "신규 7급 50자": GROUPS["7급"],
+    "7급Ⅰ 50자": GROUPS["7급"],
+    "7급Ⅱ 50자": GROUPS["7급Ⅱ"],
     "신규 7급 100자": NEW,
     "7급 전체 150자": ALL,
 }
@@ -578,14 +578,20 @@ def fresh_flashcard_deck(scope, previous_round=0):
 
 
 def page_flashcards():
-    kid_heading("🃏", "한자 카드 맞추기", "카드를 터치하면 뜻과 음이 나타나요!")
+    kid_heading("🧩", "한자 카드 맞추기", "큰 한자 카드를 터치해 뜻과 음을 확인해요!")
     options = [
         ("8급 50자", "🏅 8급 · 50자"),
-        ("신규 7급Ⅱ 50자", "🌱 신규 7급Ⅱ · 50자"),
-        ("신규 7급 50자", "🌿 신규 7급 · 50자"),
+        ("7급Ⅰ 50자", "🌿 7급Ⅰ · 50자"),
+        ("7급Ⅱ 50자", "🌱 7급Ⅱ · 50자"),
         ("신규 7급 100자", "⭐ 신규 7급 · 100자"),
         ("7급 전체 150자", "🏰 7급 전체 · 150자"),
     ]
+    # 이전 버전의 선택 값이 세션에 남아도 해당 50자 학습범위로 이어집니다.
+    old_scopes = {"신규 7급 50자": "7급Ⅰ 50자",
+                  "신규 7급Ⅱ 50자": "7급Ⅱ 50자"}
+    previous = st.session_state.get("flashcard_scope")
+    if previous in old_scopes:
+        st.session_state.flashcard_scope = old_scopes[previous]
     scope = tile_picker(options, "flashcard_scope", cols=2,
                         title="어떤 한자를 맞혀 볼까요?")
     game = st.session_state.get("flashcard_deck")
@@ -600,7 +606,7 @@ def page_flashcards():
     revealed = game["revealed"]
     st.markdown(
         f'<div class="flashcard-meter">'
-        f'<strong>🎴 {idx + 1} / {total}</strong>'
+        f'<strong>⭐ {idx + 1} / {total}</strong>'
         f'<span>· {escape(card["grade"])} · {game["round"]}번째 모험</span>'
         '</div>', unsafe_allow_html=True)
     st.progress(idx / total)
@@ -2278,59 +2284,93 @@ div.stButton>button:focus-visible{outline:4px solid #E5BEFF!important;outline-of
 }
 @media (prefers-reduced-motion:reduce){div.stButton>button,.dragon-attack-result{animation:none!important;transition:none!important;}}
 
-/* v1.2.3.6 — consistent readable mobile labels, scoped overrides only. */
+/* v1.2.3.7 — consistent readable mobile labels, scoped overrides only. */
 @media(max-width:700px){
  .st-key-kid_top_nav div.stButton>button{font-size:13px!important;}
  .record-reading{font-size:12px!important;white-space:normal!important;
    line-height:1.3!important;overflow-wrap:anywhere;}
  [class*="st-key-dragon_skill_card_"] div.stButton>button{font-size:12px!important;}
 }
-/* v1.2.3.6 — tactile flipcard screen, scoped to new flashcard containers. */
+/* v1.2.3.7 — 아동용 반응형 한자 카드: 카드/한자 모두 확대, 다른 메뉴에는 적용하지 않음. */
 .flashcard-meter {display:flex;align-items:center;gap:9px;flex-wrap:wrap;
   margin:18px 0 5px;color:#644A86;font-size:16px;font-weight:750;}
 .flashcard-meter strong {font-size:20px;color:#503B78;}
 .flashcard-meter span {color:#7B6A97;font-size:14px;}
 .flashcard-hint {text-align:center;font-size:16px;font-weight:800;
   color:#6D518E;margin:13px 0 11px;}
+
 .st-key-flashcard_front div.stButton>button,
 .st-key-flashcard_back div.stButton>button {
-  min-height:250px!important;border-radius:27px!important;
-  padding:24px 12px!important;border:3px solid #DDD0F5!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;
+  width:100%!important;
+  min-height:clamp(420px,58dvh,680px)!important;
+  padding:28px 12px!important;
+  border:3px solid #DDD0F5!important;border-radius:32px!important;
   background:linear-gradient(145deg,#FFFFFF 8%,#F6EEFF 98%)!important;
-  color:#43366D!important;text-align:center!important;justify-content:center!important;
+  color:#43366D!important;text-align:center!important;
   box-shadow:0 8px 0 #E5D9F3,0 12px 20px rgba(100,74,130,.08)!important;
-  white-space:normal!important;transition:transform .12s ease,box-shadow .12s ease!important;
+  white-space:normal!important;
+  transition:transform .12s ease,box-shadow .12s ease!important;
 }
 .st-key-flashcard_front div.stButton>button:active,
-.st-key-flashcard_back div.stButton>button:active{
-  transform:translateY(4px);box-shadow:0 4px 0 #E5D9F3!important;}
+.st-key-flashcard_back div.stButton>button:active {
+  transform:translateY(4px);
+  box-shadow:0 4px 0 #E5D9F3!important;
+}
+/* Streamlit에서는 버튼의 실제 글자가 내부 p/span에 들어가므로 그 요소에도 크기를 강제합니다. */
+.st-key-flashcard_front div.stButton>button,
+.st-key-flashcard_front div.stButton>button [data-testid="stMarkdownContainer"],
 .st-key-flashcard_front div.stButton>button p,
 .st-key-flashcard_front div.stButton>button span {
   font-family:'Noto Serif CJK KR','Batang',serif!important;
-  font-size:clamp(88px,16vw,132px)!important;font-weight:800!important;line-height:1.15!important;
+  font-size:clamp(200px,26vw,400px)!important;
+  font-weight:850!important;line-height:1.05!important;
+  text-align:center!important;
 }
 .st-key-flashcard_back div.stButton>button {
   background:linear-gradient(145deg,#FFFDF1 10%,#F2F7FF 100%)!important;
   border-color:#E2CF9F!important;
 }
+.st-key-flashcard_back div.stButton>button,
+.st-key-flashcard_back div.stButton>button [data-testid="stMarkdownContainer"],
 .st-key-flashcard_back div.stButton>button p,
 .st-key-flashcard_back div.stButton>button span {
-  font-size:clamp(31px,6vw,47px)!important;line-height:1.3!important;
-  font-weight:900!important;white-space:normal!important;word-break:keep-all!important;
+  font-size:clamp(38px,5vw,64px)!important;
+  line-height:1.3!important;font-weight:900!important;
+  white-space:normal!important;word-break:keep-all!important;text-align:center!important;
 }
-.flashcard-reveal{font-size:17px;text-align:center;margin:12px 0;
+.flashcard-reveal {font-size:17px;text-align:center;margin:12px 0;
   color:#625077;font-weight:700;}
-.flashcard-reveal span{font-family:'Noto Serif CJK KR','Batang',serif;
+.flashcard-reveal span {font-family:'Noto Serif CJK KR','Batang',serif;
   color:#71459D;font-size:25px;font-weight:900;margin-right:3px;}
-.flashcard-reveal strong{color:#453A67;}
+.flashcard-reveal strong {color:#453A67;}
 @media(max-width:700px){
+  /* 휴대전화에서는 높이는 화면의 약 절반, 한자는 가로 폭의 약 절반을 차지합니다. */
   .st-key-flashcard_front div.stButton>button,
-  .st-key-flashcard_back div.stButton>button{min-height:220px!important;padding:18px 10px!important;}
+  .st-key-flashcard_back div.stButton>button {
+    min-height:clamp(325px,53dvh,520px)!important;
+    padding:20px 8px!important;border-radius:26px!important;
+  }
+  .st-key-flashcard_front div.stButton>button,
+  .st-key-flashcard_front div.stButton>button [data-testid="stMarkdownContainer"],
   .st-key-flashcard_front div.stButton>button p,
-  .st-key-flashcard_front div.stButton>button span {font-size:105px!important;}
+  .st-key-flashcard_front div.stButton>button span {
+    font-size:clamp(168px,50vw,245px)!important;
+    line-height:1.02!important;
+  }
+  .st-key-flashcard_back div.stButton>button,
+  .st-key-flashcard_back div.stButton>button [data-testid="stMarkdownContainer"],
   .st-key-flashcard_back div.stButton>button p,
-  .st-key-flashcard_back div.stButton>button span {font-size:35px!important;}
-  .flashcard-hint{font-size:14px;}
+  .st-key-flashcard_back div.stButton>button span {
+    font-size:clamp(36px,9vw,54px)!important;line-height:1.35!important;
+  }
+  .flashcard-hint {font-size:14px;}
+}
+@media(max-width:360px){
+  .st-key-flashcard_front div.stButton>button,
+  .st-key-flashcard_front div.stButton>button [data-testid="stMarkdownContainer"],
+  .st-key-flashcard_front div.stButton>button p,
+  .st-key-flashcard_front div.stButton>button span {font-size:clamp(145px,47vw,180px)!important;}
 }
 </style>
 """,unsafe_allow_html=True)
@@ -2344,7 +2384,7 @@ st.markdown("""
 </section>
 """,unsafe_allow_html=True)
 NAV_ITEMS=[('홈','🏠 홈'),('한자 학습','📚 배우기'),('획순 쓰기','✍️ 쓰기'),
-           ('퀴즈','🎯 퀴즈'),('복습','🧠 복습'),('카드 맞추기','🃏 카드'),
+           ('퀴즈','🎯 퀴즈'),('복습','🧠 복습'),('카드 맞추기','🧩 카드'),
            ('드래곤 게임','🐉 드래곤'),('학습 기록','🏆 기록')]
 if st.session_state.get('main_nav') not in {item[0] for item in NAV_ITEMS}:
     st.session_state.main_nav='홈'
@@ -2377,4 +2417,4 @@ elif menu=='카드 맞추기':
 else:
     page_records()
 st.divider()
-st.caption('한자 탐험대 v1.2.3.6 · 개인 학습용 · 시험 공식 모의고사는 아닙니다.')
+st.caption('한자 탐험대 v1.2.3.7 · 개인 학습용 · 시험 공식 모의고사는 아닙니다.')
