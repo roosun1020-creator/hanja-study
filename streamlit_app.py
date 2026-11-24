@@ -1,4 +1,4 @@
-"""한자 탐험대 v1.2.1 | 드래곤 이미지 카드 · 버튼형 스킬 UI."""
+"""한자 탐험대 v1.2.2 | 키즈 판타지 UI · 카드 선택 · 드래곤 가디언즈."""
 
 import json
 import random
@@ -11,7 +11,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="한자 탐험대 v1.2.1",
+    page_title="한자 탐험대 v1.2.2",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -389,111 +389,296 @@ def quiz_panel():
         st.rerun()
 
 
+
+# ----- v1.2.2 Kid-friendly UI primitives: no selectbox, radio or checkbox -----
+# These helpers change only presentation state. Study, grading, reward, backup
+# and Hanzi Writer logic is intentionally kept from v1.2.1.
+
+def kid_heading(icon, title, subtitle=""):
+    subtitle_html = f'<p>{escape(subtitle)}</p>' if subtitle else ''
+    st.markdown(f'<div class="kid-heading"><div class="kid-heading-icon">{icon}</div>'
+                f'<div><h2>{escape(title)}</h2>{subtitle_html}</div></div>',
+                unsafe_allow_html=True)
+
+
+def game_stats(items):
+    """Lightweight responsive stats, not native Streamlit dashboard metrics."""
+    body = ''.join(
+        '<div class="kid-stat">'
+        f'<div class="kid-stat-icon">{icon}</div>'
+        f'<span class="kid-stat-value">{escape(str(value))}</span>'
+        f'<span class="kid-stat-label">{escape(label_)}</span>'
+        '</div>' for icon, label_, value in items
+    )
+    st.markdown(f'<div class="kid-stats">{body}</div>', unsafe_allow_html=True)
+
+
+def kid_notice(message, icon="✨"):
+    st.markdown(f'<div class="kid-notice"><span>{icon}</span>'
+                f'<span>{escape(message)}</span></div>', unsafe_allow_html=True)
+
+
+def tile_picker(options, key, cols=2, title=None):
+    """A persistent single-select tile grid, returning the selected option value.
+
+    options: [(value, label), ...]; updates immediately when a big card is touched.
+    """
+    choices = [value for value, _ in options]
+    if not choices:
+        raise ValueError('선택 옵션이 없습니다.')
+    if st.session_state.get(key) not in choices:
+        st.session_state[key] = choices[0]
+    if title:
+        st.markdown(f'<div class="kid-small-title">{escape(title)}</div>', unsafe_allow_html=True)
+    with st.container(key='tiles_' + key):
+        for start in range(0, len(options), cols):
+            row = options[start:start + cols]
+            widgets = st.columns(len(row), gap="small")
+            for col, (value, label_) in zip(widgets, row):
+                with col:
+                    selected = st.session_state[key] == value
+                    if st.button(label_ + ('  ✓' if selected else ''),
+                                 key=f'{key}_pick_{choices.index(value)}',
+                                 type='primary' if selected else 'secondary',
+                                 use_container_width=True):
+                        st.session_state[key] = value
+                        st.rerun()
+    return st.session_state[key]
+
+
+def unit_picker(key, count, label_prefix="", complete_func=None):
+    """Five-unit pages and 3+2 large unit cards instead of a dense selectbox."""
+    unit_key = key + '_unit'
+    group_key = key + '_group'
+    if not 1 <= st.session_state.get(unit_key, 0) <= count:
+        st.session_state[unit_key] = 1
+    num_groups = (count + 4)//5
+    if not 0 <= st.session_state.get(group_key, -1) < num_groups:
+        st.session_state[group_key] = (st.session_state[unit_key]-1)//5
+    with st.container(key='unit_groups_' + key):
+        group_columns = st.columns(num_groups, gap='small')
+        for g in range(num_groups):
+            start = g*5 + 1
+            end = min(count, start+4)
+            with group_columns[g]:
+                selected = g == st.session_state[group_key]
+                if st.button(f'{start}~{end}', key=f'{key}_group_{g}',
+                             type='primary' if selected else 'secondary',
+                             use_container_width=True):
+                    st.session_state[group_key] = g
+                    st.session_state[unit_key] = start
+                    st.rerun()
+    start = st.session_state[group_key]*5 + 1
+    options = list(range(start, min(count, start+4)+1))
+    st.markdown('<div class="kid-small-title">📖 모험할 단원을 골라요</div>',unsafe_allow_html=True)
+    with st.container(key='units_' + key):
+        for group in (options[:3],options[3:]):
+            if not group:
+                continue
+            cols = st.columns(len(group), gap='small')
+            for unit, col in zip(group,cols):
+                complete = bool(complete_func and complete_func(unit))
+                prefix = '⭐ ' if complete else ''
+                label_ = f'{prefix}{unit}단원'
+                if label_prefix:
+                    label_ = f'{prefix}{label_prefix} {unit}'
+                selected = st.session_state[unit_key] == unit
+                with col:
+                    if st.button(label_ + (' ✓' if selected else ''),
+                                 key=f'{key}_unit_{unit}',
+                                 type='primary' if selected else 'secondary',
+                                 use_container_width=True):
+                        st.session_state[unit_key] = unit
+                        st.rerun()
+    return st.session_state[unit_key]
+
+
+def select_stroke_char(cards, key, limit=12):
+    """Searchable large hanja tile gallery; safe for 150 symbols and mobile."""
+    available = {c['char'] for c in cards}
+    if not available:
+        return None
+    search_term = st.text_input('🔎 연습할 한자 찾기', placeholder='한자 또는 뜻·음을 적어 보세요',
+                                key=key+'_search').strip().lower()
+    filtered = [c for c in cards if search_term in c['char'].lower()
+                or search_term in label(c).lower()]
+    if not filtered:
+        kid_notice('찾는 한자가 없어요. 다른 글자를 입력해 보세요.', '🔎')
+        return None
+    chosen_key, page_key = key+'_char',key+'_page'
+    visible_chars = {c['char'] for c in filtered}
+    if st.session_state.get(chosen_key) not in visible_chars:
+        st.session_state[chosen_key] = filtered[0]['char']
+        st.session_state[key+'_page'] = 0
+    pages = (len(filtered)+limit-1)//limit
+    if not 0 <= st.session_state.get(page_key, -1) < pages:
+        st.session_state[page_key] = 0
+    p = st.session_state[page_key]
+    st.caption(f'한자를 누르면 바로 쓰기 연습으로 연결돼요 · {len(filtered)}자 중 {p+1}/{pages}쪽')
+    with st.container(key='hanja_gallery_'+key):
+        subset=filtered[p*limit:(p+1)*limit]
+        for i in range(0,len(subset),3):
+            row=subset[i:i+3]
+            cols=st.columns(len(row),gap='small')
+            for c,col in zip(row,cols):
+                with col:
+                    selected=st.session_state[chosen_key]==c['char']
+                    if st.button(f"{c['char']}\n{label(c)}"+(' ✓' if selected else ''),
+                                 key=f'{key}_char_{c["char"]}',
+                                 type='primary' if selected else 'secondary',
+                                 use_container_width=True):
+                        st.session_state[chosen_key]=c['char']
+                        st.rerun()
+    if pages>1:
+        prev,mid,nxt=st.columns([1,2,1],gap='small')
+        with prev:
+            if st.button('◀ 이전',key=key+'_prev',disabled=p==0,use_container_width=True):
+                st.session_state[page_key]=p-1
+                st.rerun()
+        with mid:
+            st.markdown(f'<div class="kid-pages">{p+1} / {pages} 페이지</div>',unsafe_allow_html=True)
+        with nxt:
+            if st.button('다음 ▶',key=key+'_next',disabled=p>=pages-1,use_container_width=True):
+                st.session_state[page_key]=p+1
+                st.rerun()
+    return st.session_state[chosen_key] if st.session_state[chosen_key] in {c['char'] for c in filtered} else filtered[0]['char']
+
+
 def page_home():
-    progress = st.session_state.progress
-    learned = len(NEW_SET.intersection(progress["learned"]))
-    mastered = sum(is_mastered(char) for char in NEW_SET)
-    a, b, c, d = st.columns(4)
-    a.metric("신규 한자 학습", f"{learned}/100")
-    b.metric("숙달한 신규 한자", f"{mastered}/100")
-    c.metric("모은 별", f"{progress['xp'] // 50}개")
-    d.metric("연속 공부", f"{study_streak()}일")
-    st.progress(learned / 100)
-    st.caption("8급 50자는 합격 범위로 따로 복습하며, 위 진도는 새로 배울 100자 기준입니다.")
-    pending = review_chars()
+    progress=st.session_state.progress
+    learned=len(NEW_SET.intersection(progress['learned']))
+    mastered=sum(is_mastered(c) for c in NEW_SET)
+    kid_heading('🏰','오늘의 한자 모험','하루에 5자씩 배우면 드래곤도 쑥쑥 자라요!')
+    game_stats([('📖','배운 새 한자',f'{learned}/100'),('🏅','완전히 익힌 한자',f'{mastered}/100'),
+                ('⭐','모은 별',f'{progress["xp"]//50}개'),('🔥','연속 공부',f'{study_streak()}일')])
+    st.progress(learned/100)
+    st.caption('새로 배우는 7급 100자 기준이에요. 8급 50자는 별도로 복습할 수 있어요.')
+    pending=review_chars()
     if pending:
-        st.warning(f"오늘 복습할 한자가 {len(pending)}자 있어요. '복습' 메뉴에서 풀어보세요.")
+        kid_notice(f'오늘 복습을 기다리는 한자가 {len(pending)}자 있어요!','🔔')
+        if st.button('🧠 복습 모험 시작',type='primary',key='home_review',use_container_width=True):
+            st.session_state.main_nav='복습'
+            st.rerun()
     else:
-        st.info("오늘은 7급 신규 한자를 5자 배우고 퀴즈 10문제를 풀어보세요.")
-    for unit in range(20):
-        block = NEW[unit * 5:(unit + 1) * 5]
-        if any(item["char"] not in progress["learned"] for item in block):
-            grade = "7급Ⅱ" if unit < 10 else "7급"
-            st.subheader(f"추천 단원: {unit + 1}단원 ({grade})")
-            st.write("  ".join(item["char"] for item in block))
+        kid_notice('오늘도 새로운 한자 다섯 글자를 배워 볼까요?','🌈')
+    for i in range(20):
+        block=NEW[i*5:(i+1)*5]
+        if any(item['char'] not in progress['learned'] for item in block):
+            grade='7급Ⅱ' if i<10 else '7급'
+            st.markdown(f'<div class="kid-mission"><div class="kid-mission-tag">✨ 오늘의 추천 모험</div>'
+                        f'<h3>{i+1}단원 · {grade}</h3>'
+                        f'<div class="kid-mission-hanja">{" · ".join(x["char"] for x in block)}</div></div>',
+                        unsafe_allow_html=True)
+            if st.button('📖 이 단원 배우러 가기',type='primary',use_container_width=True,key='home_start_unit'):
+                st.session_state['learn_section']='7급 신규 100자'
+                st.session_state['learn_new_unit']=i+1
+                st.session_state['learn_new_group']=i//5
+                st.session_state.main_nav='한자 학습'
+                st.rerun()
             break
     else:
-        st.success("100자 신규 학습을 모두 완료했어요! 반복 복습으로 실력을 다져보세요.")
-    st.caption("이 앱은 개인 학습 보조 도구이며, 한국어문회의 공식 시험 서비스가 아닙니다.")
+        st.success('🎉 100자 모험 완료! 복습으로 마스터를 노려 보세요.')
+    cols=st.columns(2,gap='small')
+    with cols[0]:
+        if st.button('🐉 드래곤 만나기',key='home_dragon',use_container_width=True):
+            st.session_state.main_nav='드래곤 게임'
+            st.rerun()
+    with cols[1]:
+        if st.button('✍️ 획순 쓰기',key='home_write',use_container_width=True):
+            st.session_state.main_nav='획순 쓰기'
+            st.rerun()
+    st.caption('개인 학습 보조 앱이며 한국어문회 공식 시험 서비스가 아닙니다.')
 
 
 def page_learning():
-    st.subheader("한자 배우기")
-    section = st.radio("학습 범위", ["7급 신규 100자", "8급 50자 복습"], horizontal=True)
-    if section == "7급 신규 100자":
-        unit = st.selectbox("단원 선택", list(range(1, 21)),
-                            format_func=lambda n: f"{n}단원 · {'7급Ⅱ' if n <= 10 else '7급'}")
-        cards = NEW[(unit - 1) * 5:unit * 5]
+    kid_heading('📚','한자 배우기','원하는 단원 카드를 눌러 모험을 시작해요.')
+    section=tile_picker([('7급 신규 100자','🌟 7급 새 한자 100자'),
+                         ('8급 50자 복습','🏅 8급 복습 50자')],
+                        'learn_section',cols=2,title='어떤 한자를 배울까요?')
+    learned=set(st.session_state.progress['learned'])
+    if section=='7급 신규 100자':
+        def complete(i):
+            return all(c['char'] in learned for c in NEW[(i-1)*5:i*5])
+        unit=unit_picker('learn_new',20,complete_func=complete)
+        cards=NEW[(unit-1)*5:unit*5]
     else:
-        unit = st.selectbox("복습 단원", list(range(1, 11)), key="old_unit",
-                            format_func=lambda n: f"8급 복습 {n}단원")
-        cards = GROUPS["8급"][(unit - 1) * 5:unit * 5]
-
-    idx = st.session_state.card_cursor % len(cards)
-    card = cards[idx]
-    st.caption(f"{card['grade']} · 단원 {unit} · {idx + 1} / 5")
-    st.markdown(f'<div class="hanja-card">{card["char"]}</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="card-reading">{label(card)}</div>', unsafe_allow_html=True)
-    if card["char"] in ALT:
-        st.caption(f"다른 읽기/뜻: {ALT[card['char']]}")
-    if is_mastered(card["char"]):
-        st.success("숙달한 한자예요!")
-    elif card["char"] in st.session_state.progress["learned"]:
-        st.info("학습 표시 완료 · 퀴즈로 기억력을 확인해 보세요.")
-    if st.button("이 한자 익혔어요 (+2점)", type="primary",
-                 disabled=card["char"] in st.session_state.progress["learned"]):
-        mark_learned(card["char"])
+        def complete(i):
+            return all(c['char'] in learned for c in GROUPS['8급'][(i-1)*5:i*5])
+        unit=unit_picker('learn_old',10,complete_func=complete)
+        cards=GROUPS['8급'][(unit-1)*5:unit*5]
+    idx=st.session_state.card_cursor%len(cards)
+    card=cards[idx]
+    st.markdown(f'<div class="kid-lesson-label">✨ {escape(card["grade"])} · {unit}단원 · {idx+1}/5</div>',unsafe_allow_html=True)
+    st.markdown(f'<div class="hanja-card">{escape(card["char"])}</div>',unsafe_allow_html=True)
+    st.markdown(f'<div class="card-reading">{escape(label(card))}</div>',unsafe_allow_html=True)
+    if card['char'] in ALT:
+        st.caption(f'다른 읽기/뜻: {ALT[card["char"]]}')
+    if is_mastered(card['char']):
+        kid_notice('이 한자는 이미 마스터했어요!','🏆')
+    elif card['char'] in learned:
+        kid_notice('배운 한자예요. 퀴즈로 기억해 볼까요?','🌟')
+    if st.button('🌟 이 한자 배웠어요! +2점',type='primary',
+                 disabled=card['char'] in learned,use_container_width=True):
+        mark_learned(card['char'])
         st.rerun()
-    left, right = st.columns(2)
+    left,right=st.columns(2,gap='small')
     with left:
-        if st.button("이전 한자", use_container_width=True):
-            st.session_state.card_cursor = (idx - 1) % len(cards)
+        if st.button('⬅️ 이전 글자',use_container_width=True):
+            st.session_state.card_cursor=(idx-1)%len(cards)
             st.rerun()
     with right:
-        if st.button("다음 한자", use_container_width=True):
-            st.session_state.card_cursor = (idx + 1) % len(cards)
+        if st.button('다음 글자 ➡️',use_container_width=True):
+            st.session_state.card_cursor=(idx+1)%len(cards)
             st.rerun()
-    st.caption("획순은 상단의 ‘획순 쓰기’ 메뉴에서 연습할 수 있어요. 음성·예문은 다음 버전에서 추가할 예정입니다.")
+    st.caption('✍️ 획순은 상단 ‘획순 쓰기’에서 연습해요.')
 
 
 def page_quiz():
     if st.session_state.quiz is not None:
         quiz_panel()
         return
-    st.subheader("한자 퀴즈")
-    scopes = {
-        "7급 전체 (150자)": ALL,
-        "신규 7급 (100자)": NEW,
-        "7급Ⅱ 신규 (50자)": GROUPS["7급Ⅱ"],
-        "7급 신규 (50자)": GROUPS["7급"],
-        "8급 복습 (50자)": GROUPS["8급"],
-        "내가 학습 표시한 한자": [INDEX[h] for h in st.session_state.progress["learned"] if h in INDEX],
+    kid_heading('🎯','한자 퀴즈','문제를 풀고 별을 모아 보세요!')
+    scopes={
+        '7급 전체 (150자)':ALL,
+        '신규 7급 (100자)':NEW,
+        '7급Ⅱ 신규 (50자)':GROUPS['7급Ⅱ'],
+        '7급 신규 (50자)':GROUPS['7급'],
+        '8급 복습 (50자)':GROUPS['8급'],
+        '내가 학습 표시한 한자':[INDEX[h] for h in st.session_state.progress['learned'] if h in INDEX],
     }
-    scope = st.selectbox("출제 범위 선택", list(scopes))
-    st.caption("훈음 맞히기 · 한자 찾기 · 뜻 맞히기가 섞여 나옵니다. 최대 10문제입니다.")
-    if st.button("퀴즈 시작", type="primary", disabled=not scopes[scope]):
-        start_quiz(scopes[scope], scope)
+    labels=[('7급 전체 (150자)','🏰 전체 모험 · 150자'),
+            ('신규 7급 (100자)','⭐ 새로운 도전 · 100자'),
+            ('7급Ⅱ 신규 (50자)','🌱 7급Ⅱ · 50자'),
+            ('7급 신규 (50자)','🌿 7급 · 50자'),
+            ('8급 복습 (50자)','🏅 8급 다시보기 · 50자'),
+            ('내가 학습 표시한 한자',f'📚 내가 배운 글자 · {len(scopes["내가 학습 표시한 한자"])}자')]
+    scope=tile_picker(labels,'quiz_scope_tiles',cols=2,title='어떤 모험에 도전할까요?')
+    kid_notice('뜻·음·한자 찾기 문제가 섞여 나와요. 최대 10문제!','🧩')
+    if st.button('🚀 퀴즈 출발!',type='primary',disabled=not scopes[scope],use_container_width=True):
+        start_quiz(scopes[scope],scope)
         st.rerun()
     if not scopes[scope]:
-        st.info("아직 학습 표시한 한자가 없습니다. '한자 학습'에서 한자를 먼저 배워보세요.")
+        st.info('아직 배운 한자가 없어요. 한자 배우기에서 시작해 주세요.')
 
 
 def page_review():
-    if st.session_state.quiz is not None and st.session_state.quiz["title"] == "오늘의 복습":
+    if st.session_state.quiz is not None and st.session_state.quiz['title']=='오늘의 복습':
         quiz_panel()
         return
-    st.subheader("자동 복습")
-    due = review_chars()
-    st.metric("오늘 복습 예정", f"{len(due)}자")
-    st.caption("틀린 한자는 당일, 맞힌 한자는 정답 연속 횟수에 따라 1·3·7일 뒤 다시 출제됩니다.")
+    kid_heading('🧠','기억력 훈련소','한 번 더 만나면 더 오래 기억할 수 있어요!')
+    due=review_chars()
+    game_stats([('🔔','오늘의 복습',f'{len(due)}자'),('🌟','완전히 익힌 글자',f'{sum(is_mastered(c) for c in INDEX)}자')])
+    st.caption('틀린 한자는 당일, 맞힌 한자는 1·3·7일 뒤 다시 만나요.')
     if due:
-        st.write("복습할 한자: " + " · ".join(due[:30]))
-        if st.button("복습 퀴즈 시작", type="primary"):
-            start_quiz([INDEX[h] for h in due], "오늘의 복습")
+        st.markdown('<div class="kid-notice">📜 오늘 만날 한자 친구들</div>',unsafe_allow_html=True)
+        st.markdown('<div class="review-characters">' + ''.join(
+            f'<span>{escape(c)}</span>' for c in due[:30])+'</div>',unsafe_allow_html=True)
+        if st.button('🧠 복습 퀴즈 시작!',type='primary',use_container_width=True):
+            start_quiz([INDEX[h] for h in due],'오늘의 복습')
             st.rerun()
     else:
-        st.success("현재 복습 예정인 한자가 없어요. 새로운 한자를 배워보세요!")
-    st.caption("복습 일정은 퀴즈 풀이 기록이 생긴 한자부터 계산합니다.")
+        kid_notice('오늘의 복습 완료! 새로운 한자를 배워 볼까요?','🎉')
+    st.caption('복습 일정은 퀴즈 풀이 기록부터 계산돼요.')
 
 
 def restore_progress(data):
@@ -532,59 +717,82 @@ def restore_progress(data):
 
 
 def page_records():
-    st.subheader("학습 기록 · 백업")
-    progress = st.session_state.progress
-    history = progress["cards"]
-    attempts = sum(item["attempts"] for item in history.values())
-    rights = sum(item["correct"] for item in history.values())
-    a, b, c = st.columns(3)
-    a.metric("퀴즈 총 응답", f"{attempts}문제")
-    b.metric("누적 정답률", f"{rights / attempts:.0%}" if attempts else "-")
-    c.metric("획득 점수", f"{progress['xp']:,}점")
-
-    rows = []
-    for grade in ("8급", "7급Ⅱ", "7급"):
-        for card in GROUPS[grade]:
-            char = card["char"]
-            item = history.get(char, {})
-            if char in progress["learned"] or item:
-                rows.append({"급수": grade, "한자": char, "훈음": label(card),
-                             "학습 표시": "완료" if char in progress["learned"] else "-",
-                             "풀이 횟수": item.get("attempts", 0),
-                             "정답 횟수": item.get("correct", 0),
-                             "숙달": "완료" if is_mastered(char) else "진행 중",
-                             "다음 복습일": item.get("due", "-")})
-    if rows:
-        st.dataframe(rows, use_container_width=True, hide_index=True)
-    else:
-        st.info("아직 학습 기록이 없어요.")
-
-    st.divider()
-    st.markdown("**학습기록 백업 및 복원**")
-    st.warning("무료 Streamlit 서버의 세션 데이터는 영구 저장이 아닙니다. 학습 후 반드시 백업 파일을 내려받아 보관하세요.")
-    backup = json.dumps({"version": "1.2.0", "progress": progress},
-                        ensure_ascii=False, indent=2)
-    st.download_button("학습기록 JSON 다운로드", data=backup,
-                       file_name=f"hanja_progress_{today().isoformat()}.json",
-                       mime="application/json", type="primary")
-    upload = st.file_uploader("이전에 내려받은 JSON 파일로 복원", type=["json"])
-    if st.button("백업 파일 불러오기", disabled=upload is None):
-        try:
-            payload = json.loads(upload.getvalue().decode("utf-8-sig"))
-            st.session_state.progress = restore_progress(payload["progress"])
-            st.session_state.quiz = None
-            st.session_state.dragon_battle = None
-            st.success("학습기록 복원을 완료했습니다.")
-        except (ValueError, TypeError, KeyError, AttributeError) as error:
-            st.error(f"파일을 복원하지 못했습니다: {error}")
-
-    with st.expander("모든 학습기록 초기화"):
-        confirm = st.checkbox("모든 기록을 지우겠습니다.")
-        if st.button("기록 삭제", disabled=not confirm):
-            st.session_state.progress = fresh_progress()
-            st.session_state.quiz = None
-            st.session_state.dragon_battle = None
-            st.rerun()
+    kid_heading('🏆','나의 모험 기록','배운 한자와 모은 별을 한눈에 확인해요.')
+    progress=st.session_state.progress
+    history=progress['cards']
+    attempts=sum(item['attempts'] for item in history.values())
+    rights=sum(item['correct'] for item in history.values())
+    game_stats([('🎯','푼 문제',f'{attempts}개'),('🥇','정답률',f'{rights/attempts:.0%}' if attempts else '—'),
+                ('⭐','모은 점수',f'{progress["xp"]:,}점')])
+    grade=tile_picker([('8급','🏅 8급'),('7급Ⅱ','🌱 7급Ⅱ'),('7급','🌿 7급')],
+                      'record_grade',cols=3,title='한자 도감을 펼쳐 봐요')
+    cards=GROUPS[grade]
+    learned=set(progress['learned'])
+    st.caption('👑 마스터 · ⭐ 배웠어요 · 🔒 아직 만나지 않았어요')
+    for start in range(0,50,10):
+        subset=cards[start:start+10]
+        html='<div class="record-gallery">'
+        for card in subset:
+            char=card['char']
+            state='master' if is_mastered(char) else 'learned' if char in learned else 'locked'
+            tag='👑' if state=='master' else '⭐' if state=='learned' else '🔒'
+            html+=(f'<div class="record-item {state}"><div class="record-char">{escape(char)}</div>'
+                   f'<div class="record-reading">{escape(label(card))}</div>'
+                   f'<div class="record-status">{tag}</div></div>')
+        st.markdown(html+'</div>',unsafe_allow_html=True)
+    # Preserve the original detailed record and backup features for parents.
+    rows=[]
+    for g in ('8급','7급Ⅱ','7급'):
+        for card in GROUPS[g]:
+            char=card['char']
+            item=history.get(char,{})
+            if char in learned or item:
+                rows.append({'급수':g,'한자':char,'훈음':label(card),
+                             '학습 표시':'완료' if char in learned else '-',
+                             '풀이 횟수':item.get('attempts',0),
+                             '정답 횟수':item.get('correct',0),
+                             '숙달':'완료' if is_mastered(char) else '진행 중',
+                             '다음 복습일':item.get('due','-')})
+    with st.expander('👨‍👩‍👧 학부모용 자세한 학습 기록 · 백업',expanded=False):
+        if rows:
+            st.dataframe(rows,use_container_width=True,hide_index=True)
+        else:
+            st.info('아직 학습 기록이 없습니다.')
+        st.markdown('**학습기록 저장과 복원**')
+        st.warning('무료 Streamlit 서버의 세션 데이터는 영구 저장이 아닙니다. 공부한 뒤 JSON 백업을 보관하세요.')
+        backup=json.dumps({'version':'1.2.2','progress':progress},ensure_ascii=False,indent=2)
+        st.download_button('💾 학습기록 파일 저장하기',data=backup,
+                           file_name=f'hanja_progress_{today().isoformat()}.json',
+                           mime='application/json',type='primary')
+        upload=st.file_uploader('이전에 저장한 JSON 파일 선택',type=['json'])
+        if st.button('🔄 저장한 기록 불러오기',disabled=upload is None):
+            try:
+                payload=json.loads(upload.getvalue().decode('utf-8-sig'))
+                st.session_state.progress=restore_progress(payload['progress'])
+                st.session_state.quiz=None
+                st.session_state.dragon_battle=None
+                st.success('학습 기록을 불러왔습니다.')
+            except (ValueError,TypeError,KeyError,AttributeError) as error:
+                st.error(f'파일을 복원하지 못했습니다: {error}')
+        st.markdown('**기록 관리**')
+        if not st.session_state.get('reset_confirm_mode',False):
+            if st.button('🔐 전체 기록 초기화 메뉴 열기'):
+                st.session_state.reset_confirm_mode=True
+                st.rerun()
+        else:
+            st.error('학습 기록과 드래곤 성장 정보가 모두 초기화됩니다. 되돌릴 수 없습니다.')
+            cancel,confirm=st.columns(2)
+            with cancel:
+                if st.button('↩️ 취소',use_container_width=True):
+                    st.session_state.reset_confirm_mode=False
+                    st.rerun()
+            with confirm:
+                if st.button('🗑️ 정말 모두 삭제',type='primary',use_container_width=True):
+                    st.session_state.progress=fresh_progress()
+                    st.session_state.quiz=None
+                    st.session_state.dragon_battle=None
+                    st.session_state.reset_confirm_mode=False
+                    st.rerun()
 
 
 def dragon_image(key, stage):
@@ -610,8 +818,7 @@ def dragon_art(key, stage, caption=None):
 
 def page_dragons():
     """기존 v1.2.0 배틀 로직을 유지한 카드형 캐릭터 및 스킬 인터페이스."""
-    st.subheader("드래곤 가디언즈")
-    st.caption("귀여운 아기 드래곤과 함께 한자를 배우고, 기술을 익히고, 진화해요!")
+    kid_heading('🐉', '드래곤 가디언즈', '한자를 익히고, 기술을 배우고, 멋진 수호룡으로 성장해요!')
     progress = st.session_state.progress
     game = progress.setdefault("game", fresh_game())
     units = completed_unit_count(progress)
@@ -682,11 +889,8 @@ def page_dragons():
                         f'{dragon["hanja"][stage-1]}</div>', unsafe_allow_html=True)
             st.caption("한자의 힘으로 성장하는 나의 드래곤")
 
-    a, b, c, d = st.columns(4)
-    a.metric("완료한 신규 단원", f"{units}/20")
-    b.metric("해금 기술", f"{len(skills)}/8")
-    c.metric("드래곤 경험치", f"{game['xp']:,} XP")
-    d.metric("승리한 배틀", f"{wins}개")
+    game_stats([('📚','학습 단원',f'{units}/20'),('⚡','배운 기술',f'{len(skills)}/8'),
+                ('💎','드래곤 XP',f'{game["xp"]:,}'),('🏆','승리한 배틀',f'{wins}개')])
     st.progress(units / 20)
     st.caption(f"드래곤 레벨 {1 + game['xp'] // 60} · 다음 레벨까지 {60 - game['xp'] % 60} XP")
     if stage == 1:
@@ -697,10 +901,15 @@ def page_dragons():
         st.success("최종 진화 달성! 전설의 수호 드래곤과 함께하세요.")
 
     with st.expander("기술 도감 · 해금 조건", expanded=False):
-        for requirement, min_stage, move, reference in SKILL_TREE[chosen]:
-            available = units >= requirement and stage >= min_stage
-            state = "습득 완료" if available else f"잠김 · {requirement}단원, 진화 {min_stage}단계"
-            st.write(f"{'✅' if available else '🔒'} **{move}** — {state}")
+        skills_html='<div class="skill-gallery">'
+        for i,(requirement, min_stage, move, reference) in enumerate(SKILL_TREE[chosen]):
+            available=units>=requirement and stage>=min_stage
+            icon=SKILL_ICONS[chosen][i] if available else '🔒'
+            detail='배운 기술!' if available else f'{requirement}단원 · 진화 {min_stage}단계'
+            skills_html+=(f'<div class="skill-entry {"unlocked" if available else "locked"}">'
+                          f'<span>{icon}</span><strong>{escape(move)}</strong>'
+                          f'<small>{escape(detail)}</small></div>')
+        st.markdown(skills_html+'</div>',unsafe_allow_html=True)
         st.caption("기술은 속성별로 총 8개입니다. 해금 조건을 달성하면 배틀에서 선택할 수 있어요.")
 
     if battle is None:
@@ -709,8 +918,17 @@ def page_dragons():
         scopes = ["8급 복습"] + [f"신규 {n}단원" for n in range(1, 21)]
         if len(progress.get("learned", [])) >= 5:
             scopes.insert(1, "학습 완료 한자")
-        scope = st.selectbox("배틀 학습 범위", scopes, key="dragon_battle_scope")
-        pool = battle_scope_pool(progress, scope)
+        general=[(s, '🏅 '+s if s=='8급 복습' else '📚 '+s) for s in scopes if not s.startswith('신규 ')]
+        mode=tile_picker([('basic','🛡️ 기본 모험'),('unit','📖 단원별 모험')],
+                         'battle_scope_mode',cols=2,title='전투할 모험의 종류')
+        if mode=='basic':
+            scope=tile_picker(general,'battle_scope_basic',cols=2)
+        else:
+            selected_unit=unit_picker('battle_new_unit',20,
+                                      complete_func=lambda n: all(c['char'] in progress['learned'] for c in NEW[(n-1)*5:n*5]))
+            scope=f'신규 {selected_unit}단원'
+            kid_notice(f'{selected_unit}단원 한자로 전투해요!','⚔️')
+        pool=battle_scope_pool(progress,scope)
         st.caption("5문제 중 4문제 이상 정답이면 승리! 처음 승리한 범위마다 경험치 30점을 받습니다.")
         if st.button("드래곤 배틀 시작", type="primary", use_container_width=True,
                      disabled=len(pool) < 5):
@@ -818,63 +1036,54 @@ def page_dragons():
     st.caption("캐릭터는 직접 제작한 드래곤 이미지입니다. 한국식 획순 검증은 별도 진행 중입니다.")
 
 
+
 def page_writing():
-    # 한자 데이터는 기존 8급/7급Ⅱ/7급 150자를 재사용합니다.
-    # '학습 완료'는 학습 메뉴의 '익혔어요'로 표시한 한자만 의미합니다.
-    st.subheader("획순 쓰기")
-    st.write("단원별로 익히거나 배운 한자를 다시 골라, 획순을 확인하고 직접 써보세요.")
-    view = st.radio(
-        "연습 방식", ["단원별", "학습 완료", "전체 한자"],
-        horizontal=True, key="stroke_view",
-    )
-    if view == "단원별":
-        grade = st.selectbox("급수 선택", ["7급Ⅱ", "7급", "8급"], key="stroke_grade")
-        unit = st.selectbox(
-            "단원 선택", list(range(1, 11)),
-            format_func=lambda x: f"{grade} · {x}단원 (5자)",
-            key="stroke_unit",
-        )
-        cards = GROUPS[grade][(unit - 1) * 5: unit * 5]
-        st.caption("해당 단원의 한자 5자를 모두 연습할 수 있습니다.")
-    elif view == "학습 완료":
-        learned = set(st.session_state.progress["learned"])
-        cards = [card for card in ALL if card["char"] in learned]
-        st.caption(f"학습 메뉴에서 '익혔어요'를 누른 한자: {len(cards)}자")
+    # HanziWriter/Chinese stroke ordering notice unchanged; UI only.
+    kid_heading('✍️','마법 한자 쓰기','한자 카드를 고르고, 획순을 보며 직접 써 보세요!')
+    view=tile_picker([('단원별','📖 단원별 쓰기'),('학습 완료','⭐ 배운 글자'),
+                      ('전체 한자','🗺️ 전체 한자')],
+                     'stroke_view_tiles',cols=3,title='어떻게 연습할까요?')
+    if view=='단원별':
+        grade=tile_picker([('7급Ⅱ','🌱 7급Ⅱ'),('7급','🌿 7급'),('8급','🏅 8급')],
+                          'stroke_grade_tiles',cols=3,title='급수를 골라요')
+        unit=unit_picker('stroke_units_'+grade,10)
+        cards=GROUPS[grade][(unit-1)*5:unit*5]
+        st.caption('이 단원의 다섯 글자를 모두 연습해 볼 수 있어요.')
+    elif view=='학습 완료':
+        learned=set(st.session_state.progress['learned'])
+        cards=[c for c in ALL if c['char'] in learned]
         if not cards:
-            st.info("아직 학습 완료 표시된 한자가 없습니다. '한자 학습'에서 '익혔어요'를 눌러주세요. 8급 합격은 자동으로 50자 학습 완료 처리되지 않습니다.")
+            kid_notice('아직 배운 한자가 없어요. 한자 배우기에서 별을 눌러 주세요.','🌱')
             return
     else:
-        grade = st.selectbox("검색 범위", ["전체 150자", "8급", "7급Ⅱ", "7급"], key="stroke_all_grade")
-        cards = ALL if grade == "전체 150자" else GROUPS[grade]
-        st.caption("목록을 클릭하고 한자를 입력하면 검색할 수 있습니다.")
-
-    if view == "단원별":
-        # 아이가 터치하기 쉽도록 5개 한자를 큰 버튼으로 표시합니다.
-        selection_id = f"stroke_unit_pick_{grade}_{unit}"
-        if st.session_state.get(selection_id) not in [c["char"] for c in cards]:
-            st.session_state[selection_id] = cards[0]["char"]
-        # 선택 버튼은 한자 자체를 크게 표시합니다. 모바일에서도 3+2 배열 유지.
-        with st.container(key="stroke_unit_buttons"):
-            for start in (0, 3):
-                row_cards = cards[start:start + 3]
-                cols = st.columns(len(row_cards))
-                for i, card in enumerate(row_cards):
-                    with cols[i]:
-                        if st.button(
-                            card["char"], use_container_width=True,
-                            type="primary" if st.session_state[selection_id] == card["char"] else "secondary",
-                            key=f"stroke_pick_{grade}_{unit}_{card['char']}",
-                        ):
-                            st.session_state[selection_id] = card["char"]
-        char = st.session_state[selection_id]
+        grade=tile_picker([('전체 150자','🗺️ 전체'),('8급','🏅 8급'),
+                           ('7급Ⅱ','🌱 7급Ⅱ'),('7급','🌿 7급')],
+                          'stroke_all_grade_tiles',cols=2,title='한자 모험 범위')
+        cards=ALL if grade=='전체 150자' else GROUPS[grade]
+    if view=='단원별':
+        selection_id=f'stroke_unit_pick_{grade}_{unit}'
+        if st.session_state.get(selection_id) not in [c['char'] for c in cards]:
+            st.session_state[selection_id]=cards[0]['char']
+        st.markdown('<div class="kid-small-title">한자를 하나 골라 보세요</div>',unsafe_allow_html=True)
+        with st.container(key='stroke_unit_buttons'):
+            for row in (cards[:3],cards[3:]):
+                cols=st.columns(len(row),gap='small')
+                for card,col in zip(row,cols):
+                    with col:
+                        selected=st.session_state[selection_id]==card['char']
+                        if st.button(card['char']+(' ✓' if selected else ''),
+                                     use_container_width=True,
+                                     type='primary' if selected else 'secondary',
+                                     key=f'stroke_pick_{grade}_{unit}_{card["char"]}'):
+                            st.session_state[selection_id]=card['char']
+                            st.rerun()
+        char=st.session_state[selection_id]
     else:
-        # 완료한 한자와 전체 150자는 검색 가능한 목록이 더 편리합니다.
-        option_key = f"stroke_selection_{view}_{st.session_state.get('stroke_all_grade', '')}"
-        char = st.selectbox(
-            "연습할 한자", [card["char"] for card in cards],
-            format_func=lambda c: f"{c} · {label(INDEX[c])} ({INDEX[c]['grade']})",
-            key=option_key,
-        )
+        selection_key=f'stroke_gallery_{view}_{grade if view=="전체 한자" else "learned"}'
+        char=select_stroke_char(cards,selection_key,limit=12)
+        if char is None:
+            return
+
     # 작게 표시되던 '선택한 한자' 설명을 별도 큰 카드로 개선.
     selected_card = INDEX[char]
     st.markdown(
@@ -1359,30 +1568,192 @@ div.stButton > button, div.stDownloadButton > button {min-height:54px;border-rad
 </style>
 """, unsafe_allow_html=True)
 
+
+# v1.2.2 playground theme. The HanziWriter iframe and grading logic are untouched.
+st.markdown(r"""
+<style>
+:root { --kid-ink:#303753; --kid-berry:#7452B5; --kid-cream:#FFFDF7;
+        --kid-peach:#FFE3CA; --kid-mint:#D9F7EB; --kid-lilac:#EEE7FE; }
+.stApp {background:radial-gradient(ellipse 80% 430px at 50% 0%,#E8E6FF 0%,transparent 75%),
+                 linear-gradient(180deg,#FFF9F0 0%,#FAF8FF 54%,#F2FAFF 100%);}
+.block-container {max-width:1060px;padding-top:1rem;padding-bottom:3rem;}
+h1,h2,h3,[data-testid="stMarkdownContainer"] h2,[data-testid="stMarkdownContainer"] h3{color:#373558;}
+/* Grand fantasy banner, not a productivity dashboard */
+.study-hero{position:relative;overflow:hidden;border:3px solid rgba(255,255,255,.85);
+  padding:24px 32px 27px;background:linear-gradient(115deg,#7353BD 0%,#A572CE 47%,#E89EAF 100%);
+  box-shadow:0 12px 27px rgba(108,70,155,.16);border-radius:28px;margin-bottom:13px;}
+.study-hero:after{content:'✦   ✨   ✦';font-size:38px;letter-spacing:25px;color:rgba(255,255,255,.55);
+  position:absolute;top:8px;right:-35px;transform:rotate(-12deg);pointer-events:none;}
+.study-hero-kicker{color:#FFF6C9;font-size:12px;letter-spacing:2px;}
+.study-hero h1 {font-size:clamp(29px,4.6vw,46px);font-weight:950;text-shadow:0 3px 0 rgba(61,37,101,.16);}
+.study-hero p {color:#fff;font-weight:750;font-size:clamp(13px,2vw,17px);}
+/* Easy-to-press candy-like buttons */
+div.stButton>button,div.stDownloadButton>button{
+  min-height:57px;border-radius:18px;border:2px solid #DCD8F0;color:#3A3D61;
+  background:linear-gradient(#FFFFFF,#FBF8FF);box-shadow:0 4px 0 #E5E1F0;
+  font-weight:850;transition:transform .1s ease,box-shadow .1s ease,border-color .12s;}
+div.stButton>button:hover:not(:disabled),div.stDownloadButton>button:hover:not(:disabled){
+  border-color:#B79BEA;color:#5B469F;background:#F5F0FF;transform:translateY(-1px);}
+div.stButton>button:active:not(:disabled){transform:translateY(2px);box-shadow:0 1px 0 #D3CAEA;}
+div.stButton>button[kind="primary"],div.stDownloadButton>button[kind="primary"],
+div.stButton>button[data-testid="stBaseButton-primary"]{
+  color:white;border-color:#8065CA;background:linear-gradient(135deg,#9071D6,#7255BF);
+  box-shadow:0 4px 0 #6043A9;}
+div.stButton>button[kind="primary"]:hover:not(:disabled),
+div.stButton>button[data-testid="stBaseButton-primary"]:hover:not(:disabled){
+  color:white;background:linear-gradient(135deg,#9F80E4,#7B5BCB);border-color:#7153BC;}
+div.stButton>button:focus-visible{outline:4px solid #E5BEFF!important;outline-offset:2px;}
+/* Touch-friendly top navigation, 4+3 buttons */
+.st-key-kid_top_nav {background:#FFFFFFD9;border:2px solid #EAE0F7;border-radius:22px;
+  padding:12px 14px 8px;margin-bottom:14px;box-shadow:0 6px 14px rgba(73,60,120,.06);}
+.st-key-kid_top_nav div.stButton>button{padding:8px 3px;min-height:60px;border-radius:17px;
+  font-size:clamp(12px,1.7vw,16px);line-height:1.2;white-space:normal;}
+.st-key-kid_top_nav div.stButton>button p {font-size:inherit!important;font-weight:900;}
+/* Page titles and game-like stats */
+.kid-heading {display:flex;align-items:center;gap:14px;margin:14px 0 19px;}
+.kid-heading-icon{display:flex;align-items:center;justify-content:center;font-size:31px;
+  flex:0 0 63px;width:63px;height:63px;border-radius:22px;background:#FFF4DB;
+  border:3px solid #FFE3AE;box-shadow:0 4px 0 #F5DBA8;}
+.kid-heading h2{margin:0;font-size:clamp(23px,3.5vw,33px);font-weight:950;color:#44376B;line-height:1.25;}
+.kid-heading p{margin:4px 0 0;font-size:clamp(13px,1.7vw,16px);color:#6D6885;font-weight:720;}
+.kid-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:12px 0 16px;}
+.kid-stat{display:flex;align-items:center;flex-direction:column;justify-content:center;
+  text-align:center;padding:16px 8px 14px;min-height:130px;border:2px solid #F2E1CF;
+  border-radius:22px;background:linear-gradient(160deg,#FFFEFD,#FFF3E7);
+  box-shadow:0 5px 0 #F1E4D8;}
+.kid-stat:nth-child(2n){background:linear-gradient(155deg,#FFFFFF,#EFF7FF);border-color:#DFEBF5;box-shadow:0 5px 0 #E4EDF5;}
+.kid-stat-icon{font-size:28px;}.kid-stat-value{font-size:clamp(19px,2.6vw,30px);font-weight:950;color:#4A4170;}
+.kid-stat-label{font-size:13px;font-weight:850;color:#706887;}
+.kid-notice{display:flex;align-items:center;gap:12px;padding:13px 17px;border:2px solid #F3DFC0;
+  border-radius:19px;background:#FFFAEC;color:#645170;font-size:16px;font-weight:850;margin:13px 0;}
+.kid-notice>span:first-child{font-size:22px;}
+.kid-small-title{font-size:17px;color:#5E497C;font-weight:950;margin:17px 0 9px;}
+.kid-pages{text-align:center;padding:14px;color:#695880;font-weight:850;}
+.kid-mission{background:linear-gradient(125deg,#FFFAE8,#FFF2DA);border:3px solid #FCE1AF;
+  border-radius:24px;padding:20px 24px;margin:17px 0 10px;}
+.kid-mission-tag{font-weight:950;color:#BE793B;font-size:15px;}
+.kid-mission h3{margin:3px 0 6px;font-weight:950;font-size:25px;color:#59426D;}
+.kid-mission-hanja{font-family:'Noto Serif CJK KR','Batang',serif;font-size:clamp(28px,5vw,46px);
+  letter-spacing:5px;font-weight:800;color:#463768;}
+.kid-lesson-label{background:#EEE9FF;color:#6753A1;border-radius:20px;
+  font-weight:950;font-size:15px;padding:8px 16px;text-align:center;margin:12px 0 10px;}
+/* Selected tile cards and page groups */
+[class*="st-key-tiles_"] div.stButton>button,[class*="st-key-units_"] div.stButton>button{
+  min-height:75px;border-radius:20px;border-width:2px;
+  padding:11px 7px;white-space:normal;line-height:1.4;}
+[class*="st-key-tiles_"] div.stButton>button p,[class*="st-key-units_"] div.stButton>button p{
+  font-size:clamp(14px,2vw,19px);font-weight:900;}
+[class*="st-key-unit_groups_"] div.stButton>button{min-height:48px;border-radius:16px;padding:5px 2px;}
+[class*="st-key-hanja_gallery_"] div.stButton>button{
+  min-height:95px;padding:10px 4px;border-radius:18px;white-space:pre-line;}
+[class*="st-key-hanja_gallery_"] div.stButton>button p{white-space:pre-line;font-size:clamp(17px,2.5vw,24px);font-weight:900;line-height:1.55;}
+/* Comfortable reading cards and quiz options */
+.hanja-card,.battle-char{background:linear-gradient(150deg,#FFFFFF,#FFF9EE);border:3px solid #E8D6EC;
+  color:#393358;border-radius:30px;box-shadow:0 6px 0 #EDE5F5;}
+.card-reading,.quiz-prompt,.battle-prompt{color:#45345C;}
+.st-key-quiz_choice_area div.stButton>button {border-color:#E4D5F3!important;background:#FFFEFF!important;
+  color:#3D3761!important;box-shadow:0 5px 0 #E8E2F3!important;}
+.st-key-quiz_choice_area div.stButton>button[data-testid="stBaseButton-primary"]{
+  background:#F2E9FF!important;color:#5F4298!important;border-color:#916CCC!important;}
+.st-key-dragon_answers div.stButton>button {background:#fff;border-color:#DFD6F2!important;color:#423D65;}
+.st-key-dragon_answers div.stButton>button[kind="primary"] {background:#E8DEFF;color:#4F408C;border-color:#9476D6!important;}
+/* Dragon cards and special abilities */
+[class*="st-key-dragon_starter_card_"],[class*="st-key-dragon_select_card_"]{
+  border:3px solid #E4D8F0;border-radius:24px;background:linear-gradient(#FFFFFF,#FFF8F0);
+  box-shadow:0 6px 0 #EAE0F0;}
+.st-key-dragon_feature_hero {background:linear-gradient(120deg,#FFFCF7,#F3EBFF);
+  border:3px solid #E6D9FF;border-radius:27px;box-shadow:0 5px 0 #EDE7F7;}
+.st-key-dragon_battle_fighter,.st-key-dragon_battle_enemy {border:3px solid #E6D9F5;
+  background:linear-gradient(145deg,#F5FCFF,#FFF9F0);}
+.st-key-dragon_skill_grid div.stButton>button{border-color:#DDD0F6!important;border-radius:19px!important;
+  background:linear-gradient(#FFFFFF,#F7F2FF);color:#514379;}
+.st-key-dragon_skill_grid div.stButton>button[kind="primary"]{background:#EEE3FF;color:#6740A7;
+  border-color:#9972D7!important;}
+.skill-gallery{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;}
+.skill-entry{display:flex;align-items:center;flex-direction:column;text-align:center;gap:5px;
+  padding:13px 4px;min-width:0;border:2px solid #DACDEF;border-radius:16px;background:#FFFCFF;}
+.skill-entry>span{font-size:30px;}.skill-entry strong{font-size:14px;color:#50406F;}
+.skill-entry small{font-size:11px;color:#786989;}.skill-entry.locked{background:#F1EFF3;opacity:.67;}
+/* Record book replaces visible spreadsheet with collectible cards */
+.record-gallery{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:10px 0;}
+.record-item{border-radius:17px;padding:10px 3px 8px;text-align:center;border:2px solid #E7D9E4;
+  min-width:0;background:#FFFAF5;}
+.record-item.learned{background:#FFF9E4;border-color:#F5D89B;}
+.record-item.master{background:#E9FBEF;border-color:#B4E8BE;}
+.record-item.locked{background:#F3F1F6;border-color:#E7E3EC;opacity:.7;}
+.record-char{font-family:'Noto Serif CJK KR','Batang',serif;font-size:clamp(27px,4vw,38px);
+  font-weight:800;color:#40385E;}.record-reading{font-size:12px;font-weight:750;color:#736A85;white-space:nowrap;}
+.record-status{font-size:17px;}.review-characters{display:flex;gap:7px;flex-wrap:wrap;margin:13px 0;}
+.review-characters span{background:#FFFFFF;border:2px solid #E7D9F7;padding:9px 15px;border-radius:15px;
+  font-size:25px;font-weight:800;color:#4B3B70;}
+/* Parent tools remain functional but not visually central */
+[data-testid="stExpander"]{border-radius:18px;border-color:#E8DEEE;}
+[data-testid="stFileUploader"]{border-radius:18px;}
+.st-key-stroke_unit_buttons div.stButton>button {background:#FFFDF9;border:3px solid #E0D4F3;border-radius:18px;color:#4C3A6C;}
+.st-key-stroke_unit_buttons div.stButton>button[kind="primary"] {background:#9A7ADA;color:white;border-color:#8464BE;}
+.selected-hanja-banner {background:#FFFCF6;border:3px solid #E6D5F6;box-shadow:0 5px 0 #EFE8F8;}
+/* Streamlit native controls still used for file upload/search are rounded */
+[data-testid="stTextInput"] input{background:white;border-radius:15px;border:2px solid #DED5EC;min-height:53px;}
+/* Small screens: intentionally roomy 4+3 nav and 2-column stats */
+@media(max-width:700px){
+  .block-container{padding:0.7rem 0.8rem 2.5rem;}
+  .study-hero{padding:19px 18px;border-radius:21px;margin-bottom:10px;}
+  .study-hero:after{display:none;}
+  .st-key-kid_top_nav{padding:8px 7px 6px;}
+  .st-key-kid_top_nav div.stButton>button{font-size:12px;min-height:57px;padding:8px 1px;border-radius:12px;}
+  .kid-heading{gap:11px;}.kid-heading-icon{flex-basis:49px;width:49px;height:49px;font-size:25px;border-radius:17px;}
+  .kid-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;}
+  .kid-stat{min-height:110px;}.kid-mission{padding:14px 15px;}
+  [class*="st-key-tiles_"] div.stButton>button,[class*="st-key-units_"] div.stButton>button{
+    min-height:70px;padding:8px 3px;}
+  [class*="st-key-tiles_"] div.stButton>button p,[class*="st-key-units_"] div.stButton>button p{
+    font-size:14px;}
+  .record-gallery{gap:5px;}.record-item{padding:8px 0;}
+  .record-reading{font-size:10px;letter-spacing:-.05em;}
+  .skill-gallery{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .kid-notice{font-size:14px;}
+}
+@media (prefers-reduced-motion:reduce){div.stButton>button,.dragon-attack-result{animation:none!important;transition:none!important;}}
+</style>
+""",unsafe_allow_html=True)
+
+
 st.markdown("""
 <section class="study-hero" aria-label="한자 탐험대 소개">
-  <div class="study-hero-kicker">HANJA EXPLORER · LEVEL 7</div>
-  <h1>한자 탐험대</h1>
-  <p>8급 합격에서 7급 도전까지 · 하루 5자씩 차근차근 배우고 써봐요</p>
+  <div class="study-hero-kicker">✦ HANJA DRAGON ADVENTURE ✦</div>
+  <h1>🐉 한자 탐험대</h1>
+  <p>한자를 배우면 드래곤이 성장해요! · 하루 5자씩 떠나는 판타지 모험</p>
 </section>
-""", unsafe_allow_html=True)
-menu = st.radio("메뉴", ["홈", "한자 학습", "획순 쓰기", "퀴즈", "복습", "드래곤 게임", "학습 기록"],
-                horizontal=True, label_visibility="collapsed", key="main_nav")
-st.divider()
-if menu == "홈":
+""",unsafe_allow_html=True)
+NAV_ITEMS=[('홈','🏠 홈'),('한자 학습','📚 배우기'),('획순 쓰기','✍️ 쓰기'),
+           ('퀴즈','🎯 퀴즈'),('복습','🧠 복습'),('드래곤 게임','🐉 드래곤'),('학습 기록','🏆 기록')]
+if st.session_state.get('main_nav') not in {item[0] for item in NAV_ITEMS}:
+    st.session_state.main_nav='홈'
+with st.container(key='kid_top_nav'):
+    for group in (NAV_ITEMS[:4],NAV_ITEMS[4:]):
+        navcols=st.columns(len(group),gap='small')
+        for col,(page,title) in zip(navcols,group):
+            with col:
+                active=st.session_state.main_nav==page
+                if st.button(title,key='menu_'+page,
+                             type='primary' if active else 'secondary',
+                             use_container_width=True):
+                    st.session_state.main_nav=page
+                    st.rerun()
+menu=st.session_state.main_nav
+if menu=='홈':
     page_home()
-elif menu == "한자 학습":
+elif menu=='한자 학습':
     page_learning()
-elif menu == "획순 쓰기":
+elif menu=='획순 쓰기':
     page_writing()
-elif menu == "퀴즈":
+elif menu=='퀴즈':
     page_quiz()
-elif menu == "복습":
+elif menu=='복습':
     page_review()
-elif menu == "드래곤 게임":
+elif menu=='드래곤 게임':
     page_dragons()
 else:
     page_records()
-
 st.divider()
-st.caption("한자 탐험대 v1.2.1 · 개인 학습용 · 실제 시험 문항을 재현한 공식 모의고사는 아닙니다.")
+st.caption('한자 탐험대 v1.2.2 · 개인 학습용 · 시험 공식 모의고사는 아닙니다.')
