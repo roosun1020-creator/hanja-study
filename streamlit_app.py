@@ -907,80 +907,81 @@ def page_dragons():
                         st.rerun()
         return
 
-    # 소유 캐릭터는 카드로 전환. 전투 중에는 변경을 막아 배틀 보상/연출 상태를 보존.
-    st.markdown("### 내 드래곤 선택")
-    if battle is not None:
-        st.caption("배틀 진행 중에는 드래곤을 바꿀 수 없어요. 배틀 종료 후 선택할 수 있습니다.")
-    cols = st.columns(3, gap="medium")
     wins = len(game["won_battles"])
     stage = evolution_stage(units, wins)
-    for idx, (key, character) in enumerate(DRAGONS.items()):
-        owned = key in game["owned"]
-        active = key == game["active"]
-        with cols[idx]:
-            with st.container(key=f"dragon_select_card_{key}"):
-                dragon_art(key, stage if owned else 1)
-                st.markdown(f'<div class="dragon-card-symbol">{character["hanja"][stage-1] if owned else character["hanja"][0]}</div>'
-                            f'<div class="dragon-card-name">{character["name"]}</div>',
-                            unsafe_allow_html=True)
-                if owned:
-                    msg = "선택 중 ✓" if active else f"{character['name']} 선택"
-                else:
-                    others = [x for x in DRAGONS if x != game["starter"]]
-                    needed = 10 if key == others[0] else 20
-                    msg = f"🔒 {needed}단원 해금"
-                if st.button(msg, key=f"dragon_switch_{key}",
-                             type="primary" if active and owned else "secondary",
-                             use_container_width=True,
-                             disabled=(not owned) or active or (battle is not None)):
-                    game["active"] = key
-                    st.rerun()
-
     chosen = game["active"]
     dragon = DRAGONS[chosen]
     skills = unlocked_skills(chosen, units, stage)
-    with st.container(key="dragon_feature_hero"):
-        colpic, colinfo = st.columns([1, 1.7], gap="medium", vertical_alignment="center")
-        with colpic:
-            dragon_art(chosen, stage)
-        with colinfo:
-            st.caption(f"{dragon['kind']} 속성 · {stage}단계 진화")
-            st.markdown(f'<div class="dragon-hero-name">{escape(dragon["name"])} · '
-                        f'{escape(dragon["forms"][stage-1])}</div>'
-                        f'<div class="dragon-hero-hanja" style="color:{dragon["color"]}">'
-                        f'{dragon["hanja"][stage-1]}</div>', unsafe_allow_html=True)
-            st.caption("한자의 힘으로 성장하는 나의 드래곤")
+    # 게임 도중에는 큰 드래곤 선택/도감/통계를 숨겨
+    # 스마트폰 한 화면에 상대·기술·문제·답안이 최대한 들어오게 합니다.
+    if battle is None:
+        # 소유 캐릭터는 카드로 전환. 전투 중에는 변경을 막아 배틀 보상/연출 상태를 보존.
+        st.markdown("### 내 드래곤 선택")
+        cols = st.columns(3, gap="medium")
+        for idx, (key, character) in enumerate(DRAGONS.items()):
+            owned = key in game["owned"]
+            active = key == game["active"]
+            with cols[idx]:
+                with st.container(key=f"dragon_select_card_{key}"):
+                    dragon_art(key, stage if owned else 1)
+                    st.markdown(f'<div class="dragon-card-symbol">{character["hanja"][stage-1] if owned else character["hanja"][0]}</div>'
+                                f'<div class="dragon-card-name">{character["name"]}</div>',
+                                unsafe_allow_html=True)
+                    if owned:
+                        msg = "선택 중 ✓" if active else f"{character['name']} 선택"
+                    else:
+                        others = [x for x in DRAGONS if x != game["starter"]]
+                        needed = 10 if key == others[0] else 20
+                        msg = f"🔒 {needed}단원 해금"
+                    if st.button(msg, key=f"dragon_switch_{key}",
+                                 type="primary" if active and owned else "secondary",
+                                 use_container_width=True,
+                                 disabled=(not owned) or active or (battle is not None)):
+                        game["active"] = key
+                        st.rerun()
 
-    game_stats([('📚','학습 단원',f'{units}/20'),('⚡','배운 기술',f'{len(skills)}/5'),
-                ('💎','드래곤 XP',f'{game["xp"]:,}'),('🏆','승리한 배틀',f'{wins}개')])
-    st.progress(units / 20)
-    st.caption(f"드래곤 레벨 {1 + game['xp'] // 60} · 다음 레벨까지 {60 - game['xp'] % 60} XP")
-    if stage == 1:
-        st.caption("1차 진화: 신규 단원 5개 학습 완료 + 서로 다른 배틀 1회 승리")
-    elif stage == 2:
-        st.caption("최종 진화: 신규 단원 15개 학습 완료 + 서로 다른 배틀 3회 승리")
-    else:
-        st.success("최종 진화 달성! 전설의 수호 드래곤과 함께하세요.")
+        with st.container(key="dragon_feature_hero"):
+            colpic, colinfo = st.columns([1, 1.7], gap="medium", vertical_alignment="center")
+            with colpic:
+                dragon_art(chosen, stage)
+            with colinfo:
+                st.caption(f"{dragon['kind']} 속성 · {stage}단계 진화")
+                st.markdown(f'<div class="dragon-hero-name">{escape(dragon["name"])} · '
+                            f'{escape(dragon["forms"][stage-1])}</div>'
+                            f'<div class="dragon-hero-hanja" style="color:{dragon["color"]}">'
+                            f'{dragon["hanja"][stage-1]}</div>', unsafe_allow_html=True)
+                st.caption("한자의 힘으로 성장하는 나의 드래곤")
 
-    with st.expander("기술 도감 · 해금 조건", expanded=False):
-        st.caption("각 기술을 배울 때마다 새로운 전용 공격 이펙트가 열립니다.")
-        with st.container(key="dragon_skill_catalog"):
-            for start_idx in range(0, len(SKILL_TREE[chosen]), 2):
-                cols = st.columns(2, gap="small")
-                for i, col in zip(range(start_idx, min(start_idx+2, 5)), cols):
-                    requirement, min_stage, move, _ = SKILL_TREE[chosen][i]
-                    available = units >= requirement and stage >= min_stage
-                    with col:
-                        with st.container(key=f"dragon_catalog_{chosen}_{i}"):
-                            art = effect_image(chosen, move)
-                            if art:
-                                st.image(art, width=120)
-                            st.markdown(f"**{'✨' if available else '🔒'} {move}**")
-                            if available:
-                                st.caption('습득 완료')
-                            else:
-                                st.caption(f'{requirement}단원 완료 · 진화 {min_stage}단계')
-        st.caption("전체 5개 · 0/5/10/15/20단원 기준으로 해금해요.")
+        game_stats([('📚','학습 단원',f'{units}/20'),('⚡','배운 기술',f'{len(skills)}/5'),
+                    ('💎','드래곤 XP',f'{game["xp"]:,}'),('🏆','승리한 배틀',f'{wins}개')])
+        st.progress(units / 20)
+        st.caption(f"드래곤 레벨 {1 + game['xp'] // 60} · 다음 레벨까지 {60 - game['xp'] % 60} XP")
+        if stage == 1:
+            st.caption("1차 진화: 신규 단원 5개 학습 완료 + 서로 다른 배틀 1회 승리")
+        elif stage == 2:
+            st.caption("최종 진화: 신규 단원 15개 학습 완료 + 서로 다른 배틀 3회 승리")
+        else:
+            st.success("최종 진화 달성! 전설의 수호 드래곤과 함께하세요.")
+
+        with st.expander("기술 도감 · 해금 조건", expanded=False):
+            st.caption("각 기술을 배울 때마다 새로운 전용 공격 이펙트가 열립니다.")
+            with st.container(key="dragon_skill_catalog"):
+                for start_idx in range(0, len(SKILL_TREE[chosen]), 2):
+                    cols = st.columns(2, gap="small")
+                    for i, col in zip(range(start_idx, min(start_idx+2, 5)), cols):
+                        requirement, min_stage, move, _ = SKILL_TREE[chosen][i]
+                        available = units >= requirement and stage >= min_stage
+                        with col:
+                            with st.container(key=f"dragon_catalog_{chosen}_{i}"):
+                                art = effect_image(chosen, move)
+                                if art:
+                                    st.image(art, width=120)
+                                st.markdown(f"**{'✨' if available else '🔒'} {move}**")
+                                if available:
+                                    st.caption('습득 완료')
+                                else:
+                                    st.caption(f'{requirement}단원 완료 · 진화 {min_stage}단계')
+            st.caption("전체 5개 · 0/5/10/15/20단원 기준으로 해금해요.")
 
     if battle is None:
         st.divider()
@@ -1039,72 +1040,80 @@ def page_dragons():
     enemy = MONSTERS[enemy_id]
     st.caption(f"문제 {index+1} / {n} · 현재 정답 {battle['correct']}개 · 상대 {enemy['name']}")
     q = battle["questions"][index]
-    col1, col2 = st.columns([1, 1], gap="medium")
-    with col1:
-        with st.container(key="dragon_battle_fighter"):
-            dragon_art(chosen, stage)
-            st.markdown(f'<div class="dragon-art-caption">{escape(dragon["name"])} · 내 드래곤</div>',
-                        unsafe_allow_html=True)
-    with col2:
-        enemy_hp = max(0, 100 - 25 * battle["correct"])
-        hit = battle.get("answered") and battle.get("last_correct")
-        with st.container(key="dragon_battle_enemy_hit" if hit else "dragon_battle_enemy"):
-            art = monster_image(enemy_id)
-            if art:
-                st.image(art, width=205)
-            else:
-                st.markdown(f'<div class="dragon-enemy-icon">{enemy["emoji"]}</div>',
+    enemy_hp = max(0, 100 - 25 * battle["correct"])
+    hit = bool(battle.get("answered") and battle.get("last_correct"))
+    with st.container(key="dragon_battle_arena"):
+        col1, col2 = st.columns([1, 1], gap="small")
+        with col1:
+            with st.container(key="dragon_battle_fighter"):
+                dragon_art(chosen, stage)
+                st.markdown(f'<div class="dragon-art-caption">{escape(dragon["name"])} · 내 드래곤</div>',
                             unsafe_allow_html=True)
-            # 정답 공격에서는 실제 스킬 이펙트 이미지가 몬스터 쪽으로 날아갑니다.
-            if hit:
-                effect = effect_image(chosen, battle.get("last_skill", ""))
-                if effect:
-                    encoded = base64.b64encode(Path(effect).read_bytes()).decode("ascii")
-                    st.markdown(
-                        f'<div class="dragon-impact"><img alt="기술 공격 효과" '
-                        f'src="data:image/webp;base64,{encoded}"/></div>',
-                        unsafe_allow_html=True,
-                    )
-            badge = f" · {enemy['class']}" if enemy['class'] != '일반' else ''
-            st.markdown(f'<div class="dragon-art-caption">{escape(enemy["name"])}{badge} · HP {enemy_hp}/100</div>',
-                        unsafe_allow_html=True)
-            st.progress(enemy_hp / 100)
-    st.markdown(f'<div class="battle-char">{escape(q["char"])}</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="battle-prompt">{escape(q["title"])}</div>', unsafe_allow_html=True)
-
+        with col2:
+            with st.container(key="dragon_battle_enemy_hit" if hit else "dragon_battle_enemy"):
+                art = monster_image(enemy_id)
+                if art:
+                    st.image(art, width=176)
+                else:
+                    st.markdown(f'<div class="dragon-enemy-icon">{enemy["emoji"]}</div>',
+                                unsafe_allow_html=True)
+                badge = f" · {enemy['class']}" if enemy['class'] != '일반' else ''
+                st.markdown(f'<div class="dragon-art-caption">{escape(enemy["name"])}{badge} · HP {enemy_hp}/100</div>',
+                            unsafe_allow_html=True)
+                st.progress(enemy_hp / 100)
+        # 기술 발동 후 한 번 재실행한 화면에서만 나타나는 이동 이미지.
+        # 같은 전투 안의 버튼을 누르는 평상시 rerun에는 발사되지 않습니다.
+        if hit:
+            art = effect_image(chosen, battle.get("last_skill", ""))
+            if art:
+                encoded = base64.b64encode(Path(art).read_bytes()).decode("ascii")
+                st.markdown(
+                    f'<div class="dragon-projectile" aria-label="{escape(battle["last_skill"])} 공격 효과">'
+                    f'<img alt="{escape(battle["last_skill"])} 기술 이미지" '
+                    f'src="data:image/webp;base64,{encoded}"/></div>',
+                    unsafe_allow_html=True,
+                )
+    # 기술은 캐릭터 바로 아래에서 고릅니다. 이미지 + 한 번 탭하는 버튼만 유지.
     if not battle["answered"]:
-        # 최신 습득 기술을 처음 선택하되, 버튼으로 바꾼 뒤에도 선택 상태가 유지됩니다.
         skill_names = [entry[2] for entry in skills]
         if battle.get("move") not in skill_names:
             battle["move"] = skill_names[-1]
-        st.markdown("#### ⚡ 사용할 기술 선택")
+        st.markdown('<div class="dragon-skill-title">⚡ 기술 고르기</div>', unsafe_allow_html=True)
         with st.container(key="dragon_skill_grid"):
-            for i in range(0, len(skill_names), 2):
-                cs = st.columns(2, gap="small")
-                for j, name in enumerate(skill_names[i:i+2]):
-                    with cs[j]:
-                        move_idx = i+j
-                        with st.container(key=f"dragon_skill_card_{move_idx}"):
-                            art = effect_image(chosen, name)
-                            if art:
-                                st.image(art, width=124)
-                            selected_move = battle["move"] == name
-                            icon = SKILL_ICONS[chosen][move_idx]
-                            if st.button(f"{icon} {name}" + (" ✓" if selected_move else ""),
-                                         key=f"dragon_skill_{battle['serial']}_{index}_{move_idx}",
-                                         type="primary" if selected_move else "secondary",
-                                         use_container_width=True):
-                                battle["move"] = name
-                                st.rerun()
+            cs = st.columns(len(skill_names), gap="small")
+            for move_idx, (col, name) in enumerate(zip(cs, skill_names)):
+                with col:
+                    with st.container(key=f"dragon_skill_card_{move_idx}"):
+                        art = effect_image(chosen, name)
+                        if art:
+                            st.image(art, use_container_width=True)
+                        else:
+                            st.markdown(f'<div class="dragon-skill-fallback">{SKILL_ICONS[chosen][move_idx]}</div>',
+                                        unsafe_allow_html=True)
+                        selected_move = battle["move"] == name
+                        if st.button(name + (" ✓" if selected_move else ""),
+                                     key=f"dragon_skill_{battle['serial']}_{index}_{move_idx}",
+                                     type="primary" if selected_move else "secondary",
+                                     use_container_width=True):
+                            battle["move"] = name
+                            st.rerun()
+
+    st.markdown(f'<div class="battle-char">{escape(q["char"])}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="battle-prompt">{escape(q["title"])}</div>', unsafe_allow_html=True)
+    if not battle["answered"]:
         st.markdown("#### 정답 선택")
         with st.container(key="dragon_answers"):
-            for i, option in enumerate(q["choices"]):
-                if st.button(f"{i+1}.  {option}",
-                             key=f"dragon_answer_{battle['serial']}_{index}_{i}",
-                             type="primary" if battle["selected"] == option else "secondary",
-                             use_container_width=True):
-                    battle["selected"] = option
-                    st.rerun()
+            for start_idx in (0, 2):
+                cols = st.columns(2, gap="small")
+                for i, col in zip(range(start_idx, start_idx + 2), cols):
+                    option = q["choices"][i]
+                    with col:
+                        if st.button(f"{i+1}.  {option}",
+                                     key=f"dragon_answer_{battle['serial']}_{index}_{i}",
+                                     type="primary" if battle["selected"] == option else "secondary",
+                                     use_container_width=True):
+                            battle["selected"] = option
+                            st.rerun()
         if st.button(f"{battle['move']} 사용하기!", type="primary",
                      disabled=battle["selected"] is None, use_container_width=True):
             correct = battle["selected"] == q["answer"]
@@ -1118,13 +1127,6 @@ def page_dragons():
     else:
         st.markdown(f'<div class="dragon-skill-shout">{escape(dragon["name"])}의 '
                     f'{escape(battle["last_skill"])}!</div>', unsafe_allow_html=True)
-        with st.container(key="dragon_effect_attack"):
-            art = effect_image(chosen, battle["last_skill"])
-            if art:
-                st.image(art, width=220)
-            else:
-                st.markdown(f'<div class="dragon-enemy-icon">{dragon["icon"]}</div>',
-                            unsafe_allow_html=True)
         if battle["last_correct"]:
             st.markdown(f'<div class="dragon-attack-result dragon-attack-{chosen}">'
                         f'✨ 공격 성공! {escape(enemy["name"])}에게 25 피해!'
@@ -1820,83 +1822,123 @@ div.stButton>button:focus-visible{outline:4px solid #E5BEFF!important;outline-of
   .skill-gallery{grid-template-columns:repeat(2,minmax(0,1fr));}
   .kid-notice{font-size:14px;}
 }
-/* v1.2.3.1 — ONLY range tabs and writing hanja increase.
-   Keep the original v1.2.2 CSS for individual 1단원, 2단원, ... buttons.
-   Both text and its Streamlit Markdown wrapper receive font sizing. */
+/* v1.2.3.2 — 범위 선택은 다른 메뉴 버튼 글자와 어울리게 조정. */
 [class*="st-key-unit_groups_"] div.stButton > button {
-  min-height:64px!important;
-  padding:8px 2px!important;
-  border-radius:17px!important;
-  font-size:clamp(24px,2.8vw,29px)!important;
-  font-weight:950!important;
+  min-height:52px!important;padding:6px 2px!important;
+  border-radius:16px!important;font-size:17px!important;font-weight:900!important;
 }
 [class*="st-key-unit_groups_"] div.stButton > button [data-testid="stMarkdownContainer"],
 [class*="st-key-unit_groups_"] div.stButton > button p,
 [class*="st-key-unit_groups_"] div.stButton > button span {
-  font-size:inherit!important;
-  font-weight:950!important;
-  line-height:1.2!important;
+  font-size:inherit!important;font-weight:900!important;line-height:1.2!important;
 }
-/* 쓰기에서 '한자를 하나 골라 보세요': make the actual glyph large. */
+/* 한자 선택은 v1.2.3.1 대비 약 75%로 축소. 개별 단원 버튼은 v1.2.2 그대로. */
 .st-key-stroke_unit_buttons div.stButton > button {
-  min-height:112px!important;
-  padding:12px 3px!important;
-  font-size:clamp(55px,7vw,70px)!important;
+  min-height:90px!important;padding:9px 3px!important;
+  font-size:clamp(41px,5.25vw,53px)!important;
   font-family:"Noto Serif CJK KR","Batang",serif;
 }
 .st-key-stroke_unit_buttons div.stButton > button [data-testid="stMarkdownContainer"],
 .st-key-stroke_unit_buttons div.stButton > button p,
 .st-key-stroke_unit_buttons div.stButton > button span {
-  font-size:inherit!important;
-  line-height:1.15!important;
-  font-weight:800!important;
+  font-size:inherit!important;line-height:1.15!important;font-weight:800!important;
 }
-/* Other gallery choices are unchanged compared to v1.2.3. */
-[class*="st-key-hanja_gallery_"] div.stButton > button{min-height:112px!important;}
+[class*="st-key-hanja_gallery_"] div.stButton > button {min-height:91px!important;}
 [class*="st-key-hanja_gallery_"] div.stButton > button p {
-  font-size:clamp(26px,3.8vw,36px)!important;
+  font-size:clamp(20px,2.85vw,27px)!important;
   font-family:"Noto Serif CJK KR","Batang",serif;
 }
-/* RPG monster art, skill picture cards, and animated strike feedback. */
-.st-key-dragon_battle_enemy img,.st-key-dragon_battle_enemy_hit img{
-  display:block;max-height:214px;max-width:100%;object-fit:contain;margin:auto;
+/* v1.2.3.2 — compact encounter and visibly slower dragon-to-monster motion. */
+.st-key-dragon_battle_arena {position:relative;isolation:isolate;overflow:visible;}
+.st-key-dragon_battle_fighter,.st-key-dragon_battle_enemy,.st-key-dragon_battle_enemy_hit{
+  padding:7px 9px!important;min-height:0!important;border-radius:19px!important;
 }
-.st-key-dragon_battle_enemy_hit{position:relative;overflow:hidden;}
-.dragon-impact{position:absolute;inset:0;z-index:3;pointer-events:none;
- display:flex;align-items:center;justify-content:center;overflow:hidden;}
-.dragon-impact img{width:165px!important;height:165px!important;max-height:none!important;
- object-fit:contain;animation:impactTravel 1.15s ease-out both!important;}
-@keyframes impactTravel{0%{transform:translateX(-240px) scale(.4);opacity:0;}
- 35%{transform:translateX(-45px) scale(.85);opacity:1;}
- 58%{transform:translateX(15px) scale(1.15);opacity:1;}
- 100%{transform:translateX(24px) scale(1.4);opacity:0;}}
-.st-key-dragon_battle_enemy_hit img{animation:monsterHit .64s ease-in-out 1;}
-@keyframes monsterHit{0%,100%{transform:translateX(0);filter:none;}25%{transform:translateX(-11px);filter:brightness(1.6);}55%{transform:translateX(9px);filter:saturate(1.6);}80%{transform:translateX(-4px);}}
-.st-key-dragon_effect_attack{border:3px solid #E7D4FA;border-radius:23px;
-  background:radial-gradient(circle,#FFFDF1 5%,#F3ECFF 100%);padding:8px;text-align:center;}
-.st-key-dragon_effect_attack img{max-height:205px;object-fit:contain;margin:auto;
-  animation:skillBlast .7s cubic-bezier(.3,.6,.25,1) both;}
-@keyframes skillBlast{0%{transform:translateX(-55px) scale(.6);opacity:.25;}65%{transform:translateX(10px) scale(1.1);opacity:1;}100%{transform:translateX(0) scale(1);opacity:1;}}
-.dragon-skill-shout{text-align:center;font-size:clamp(23px,3vw,33px);font-weight:950;
-  color:#79459E;background:#FFF7E5;border-radius:18px;padding:12px 16px;margin:8px 0;}
-[class*="st-key-dragon_skill_card_"]{border:2px solid #E3D8F2;border-radius:20px;
- background:linear-gradient(#FFF,#FFF9F0);padding:8px;text-align:center;min-width:0;}
-[class*="st-key-dragon_skill_card_"] img{max-height:118px;object-fit:contain;margin:auto;}
+.st-key-dragon_battle_fighter img,.st-key-dragon_battle_enemy img,
+.st-key-dragon_battle_enemy_hit img{max-height:165px!important;object-fit:contain;margin:auto;display:block;}
+.st-key-dragon_battle_enemy_hit img{animation:monsterHitSlow .65s ease-in-out 1.82s both;}
+/* Streamlit의 markdown 래퍼를 절대 위치로 바꿔 레이아웃을 밀지 않습니다. */
+.st-key-dragon_battle_arena [data-testid="stElementContainer"]:has(.dragon-projectile){
+  position:absolute;inset:0;z-index:10;pointer-events:none;overflow:visible;
+}
+.dragon-projectile{position:absolute;top:31%;left:10%;width:clamp(60px,13vw,110px);
+  pointer-events:none;z-index:10;
+  animation:dragonToMonster 2.7s ease-in-out both;}
+.dragon-projectile img{width:100%!important;height:auto!important;max-height:110px!important;
+  filter:drop-shadow(0 5px 10px rgba(86,42,127,.28));}
+@keyframes dragonToMonster{
+  0%{left:11%;opacity:0;transform:translate(-50%,-30%) scale(.55) rotate(-10deg);}
+  12%{opacity:1;}
+  55%{left:54%;opacity:1;transform:translate(-50%,-30%) scale(.85) rotate(5deg);}
+  73%{left:76%;opacity:1;transform:translate(-50%,-30%) scale(1.08) rotate(0deg);}
+  83%{left:77%;opacity:1;transform:translate(-50%,-30%) scale(1.15);}
+  100%{left:77%;opacity:0;transform:translate(-50%,-30%) scale(1.45);}
+}
+@keyframes monsterHitSlow{
+  0%,100%{transform:translateX(0);filter:none;}
+  25%{transform:translateX(-9px);filter:brightness(1.55);}
+  55%{transform:translateX(8px);filter:saturate(1.5);}
+  82%{transform:translateX(-3px);}
+}
+.dragon-skill-title{font-size:16px;font-weight:950;color:#624AA2;margin:8px 0 5px;}
+.st-key-dragon_skill_grid{margin:0 0 6px;}
+.st-key-dragon_skill_grid [data-testid="stHorizontalBlock"]{
+  gap:5px!important;flex-wrap:nowrap!important;align-items:stretch!important;
+}
+.st-key-dragon_skill_grid [data-testid="stColumn"]{
+  min-width:0!important;flex:1 1 0!important;width:0!important;max-width:100px!important;
+}
+[class*="st-key-dragon_skill_card_"]{border:2px solid #E3D8F2;border-radius:13px;
+  background:linear-gradient(#FFFFFF,#FFF9F0);padding:4px 2px;min-width:0;text-align:center;}
+[class*="st-key-dragon_skill_card_"] img{width:auto!important;max-width:100%!important;
+  max-height:55px!important;object-fit:contain;margin:auto;}
+[class*="st-key-dragon_skill_card_"] div.stButton>button{min-height:42px!important;
+  font-size:clamp(11px,1.45vw,15px)!important;line-height:1.15!important;
+  padding:5px 1px!important;border-radius:10px!important;white-space:normal!important;
+  word-break:keep-all!important;overflow-wrap:anywhere!important;}
+[class*="st-key-dragon_skill_card_"] div.stButton>button p{font-size:inherit!important;
+  font-weight:900!important;line-height:1.15!important;}
+.dragon-skill-fallback{text-align:center;font-size:29px;}
+.st-key-dragon_answers div.stButton>button{min-height:60px!important;
+  font-size:clamp(16px,2vw,23px)!important;padding:7px 5px!important;}
+.st-key-dragon_answers div.stButton>button p{font-size:inherit!important;}
+.battle-char{font-size:clamp(86px,14vw,128px)!important;
+  line-height:1.12!important;margin:8px 0 3px!important;padding:3px 4px!important;}
+.battle-prompt{font-size:clamp(18px,2.5vw,25px)!important;margin:5px 0 8px!important;}
+.dragon-skill-shout{text-align:center;font-size:clamp(18px,2.5vw,26px);font-weight:950;
+ color:#79459E;background:#FFF7E5;border-radius:14px;padding:9px 12px;margin:7px 0;}
 [class*="st-key-dragon_catalog_"]{border:2px solid #E9DCF4;border-radius:18px;
  background:#FFFDF9;text-align:center;padding:9px;margin-bottom:7px;}
 [class*="st-key-dragon_catalog_"] img{max-height:113px;object-fit:contain;margin:auto;}
 @media(max-width:700px){
- /* Screen width has up to four range tabs, so boost size without clipping 16~20. */
  [class*="st-key-unit_groups_"] div.stButton>button{
-   font-size:clamp(21px,5.6vw,25px)!important;min-height:63px!important;padding:7px 2px!important;
+   font-size:16px!important;min-height:53px!important;padding:6px 2px!important;
  }
- /* Do not override st-key-units_: v1.2.2 retains 14px on mobile. */
- .st-key-stroke_unit_buttons div.stButton>button{font-size:55px!important;min-height:106px!important;}
- [class*="st-key-hanja_gallery_"] div.stButton>button p{font-size:27px!important;}
- [class*="st-key-dragon_skill_card_"] img{max-height:100px;}
- .st-key-dragon_battle_enemy img,.st-key-dragon_battle_enemy_hit img{max-height:150px;}
+ .st-key-stroke_unit_buttons div.stButton>button{
+   font-size:41px!important;min-height:88px!important;
+ }
+ [class*="st-key-hanja_gallery_"] div.stButton>button p{font-size:20px!important;}
+ .st-key-dragon_battle_fighter img,.st-key-dragon_battle_enemy img,
+ .st-key-dragon_battle_enemy_hit img{max-height:115px!important;}
+ .st-key-dragon_battle_fighter,.st-key-dragon_battle_enemy,.st-key-dragon_battle_enemy_hit{
+   padding:4px!important;min-height:0!important;
+ }
+ .st-key-dragon_battle_arena .dragon-art-caption{font-size:12px!important;}
+ .st-key-dragon_skill_grid [data-testid="stHorizontalBlock"]{gap:3px!important;}
+ [class*="st-key-dragon_skill_card_"]{padding:3px 1px;border-radius:10px;}
+ [class*="st-key-dragon_skill_card_"] img{max-height:43px!important;}
+ [class*="st-key-dragon_skill_card_"] div.stButton>button{
+   min-height:46px!important;font-size:11px!important;padding:4px 0!important;
+ }
+ .st-key-dragon_answers div.stButton>button{min-height:54px!important;font-size:17px!important;}
+ .battle-char{font-size:96px!important;padding:2px!important;}
+ .battle-prompt{font-size:18px!important;}
+ .dragon-projectile{width:74px;top:26%;}
 }
-@media(prefers-reduced-motion:reduce){.st-key-dragon_effect_attack img,.st-key-dragon_battle_enemy_hit img,.dragon-impact img{animation:none!important;opacity:.4!important;transform:none!important;}}
+@media(prefers-reduced-motion:reduce){
+ .dragon-projectile{animation:none!important;opacity:1!important;left:76%!important;
+  transform:translate(-50%,-30%) scale(1)!important;}
+ .st-key-dragon_battle_enemy_hit img{animation:none!important;}
+}
 @media (prefers-reduced-motion:reduce){div.stButton>button,.dragon-attack-result{animation:none!important;transition:none!important;}}
 </style>
 """,unsafe_allow_html=True)
@@ -1940,4 +1982,4 @@ elif menu=='드래곤 게임':
 else:
     page_records()
 st.divider()
-st.caption('한자 탐험대 v1.2.3.1 · 개인 학습용 · 시험 공식 모의고사는 아닙니다.')
+st.caption('한자 탐험대 v1.2.3.2 · 개인 학습용 · 시험 공식 모의고사는 아닙니다.')
